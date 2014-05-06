@@ -36,13 +36,13 @@ class TestPacketGenerator(unittest.TestCase):
 		self.assertTrue(isinstance(pktGen, packetGenerator.PacketGenerator))
 		pktGen = None
 		# test that the object is created with all arguments
-		pktGen = packetGenerator.PacketGenerator('unitTest', 1, msgQueue, 20, True, 'Seed String')
+		pktGen = packetGenerator.PacketGenerator('unitTest', 1, msgQueue, 2, True, 'Seed String')
 		self.assertTrue(isinstance(pktGen, packetGenerator.PacketGenerator))
 		# test the msgQueue gets a message (a message is a tupe of three items)
 		msg = msgQueue.get()
 		self.assertTrue(isinstance(msg, tuple) and len(msg) is 3)
 	def test_MakePackets(self):
-		pktGen = packetGenerator.PacketGenerator('unitTest', 1, bytes=20)
+		pktGen = packetGenerator.PacketGenerator('unitTest', 1, bytes=2)
 		self.assertTrue(pktGen.queue.empty())
 		pktGen.makePackets(1)
 		self.assertFalse(pktGen.queue.empty())
@@ -51,26 +51,36 @@ class TestPacketGenerator(unittest.TestCase):
 		self.assertTrue(pktGen.queue.empty())
 	def test_thread(self):
 		testAssert = True
-		pktGen = packetGenerator.PacketGenerator('unitTest', 1, bytes=20)
+		pktGen = packetGenerator.PacketGenerator('unitTest', 1, bytes=2)
 		try:
 			pktGen.start()
 			self.assertTrue(pktGen.queue.empty())
+			# tell thread to create some packets
+			pktGen.runLock.acquire()
+			pktGen.number = 1
+			pktGen.runLock.release()
 			# give time to create first packets
 			time.sleep(2.0)
 			startTime = time.time()
 			# run the thread for 3 seconds
 			while (time.time() - startTime) < 3.0:
+				pktGen.runLock.acquire()    # lock around calls that need to be atomic
 				self.assertFalse(pktGen.queue.empty())
 				queueSize = pktGen.queue.qsize()
+				pktGen.runLock.release()
 				# pull packet off of Queue
+				pktGen.runLock.acquire()    # lock around calls that need to be atomic
 				pktGen.queue.get()
 				newQueueSize = pktGen.queue.qsize()
 				self.assertTrue((newQueueSize + 1) is queueSize)
 				pktGen.packetUsed.set()
+				pktGen.runLock.release()
 				# wait some time for the new packet to be generated
 				time.sleep(0.3)
+				pktGen.runLock.acquire()    # lock around calls that need to be atomic
 				newQueueSize = pktGen.queue.qsize()
 				self.assertTrue(newQueueSize is queueSize)
+				pktGen.runLock.release()
 			# Stop the thread
 			pktGen.runLock.acquire()
 			pktGen.running = False

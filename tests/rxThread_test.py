@@ -1,5 +1,6 @@
 # rxThread_test
 import traceback
+import threading
 import unittest
 import Queue
 import time
@@ -55,11 +56,11 @@ class TestRxThread(unittest.TestCase):
 		msgQueue = Queue.Queue()
 		threadEvent = threading.Event()
 		# test that the object is created with minimal arguments
-		rx = rxThread.RxThread('unitTest', 1, sendObj)
+		rx = rxThread.RxThread('unitTest', sendObj)
 		self.assertTrue(isinstance(rx, rxThread.RxThread))
 		rx = None
 		# test that the object is created with all arguments
-		rx = rxThread.RxThread('unitTest', 1, sendObj, msgQueue, threadEvent)
+		rx = rxThread.RxThread('unitTest', sendObj, 1, msgQueue, threadEvent)
 		self.assertTrue(isinstance(rx, rxThread.RxThread))
 		# test the msgQueue gets a message (a message is a tupe of three items)
 		msg = msgQueue.get()
@@ -69,7 +70,7 @@ class TestRxThread(unittest.TestCase):
 		sendObj = dataSendObj()
 		msgQueue = Queue.Queue()
 		threadEvent = threading.Event()
-		rx = rxThread.RxThread('unitTest', 1, sendObj, msgQueue, threadEvent)
+		rx = rxThread.RxThread('unitTest', sendObj, 1, msgQueue, threadEvent)
 		try:
 			self.assertFalse(rx.syncRxTxEvent.is_set())
 			rx.start()

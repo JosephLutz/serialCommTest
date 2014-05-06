@@ -105,8 +105,8 @@ class TestSerialData(unittest.TestCase):
 			readTimeout=1.0,
 			writeTimeout=None,
 			interCharTimeout=None)
-		ser.txThread = txThread.TxThread('TX Thread', 1, ser)
-		ser.rxThread = rxThread.RxThread('RX Thread', 2, ser)
+		ser.txThread = txThread.TxThread('TX Thread', ser)
+		ser.rxThread = rxThread.RxThread('RX Thread', ser)
 		# verify the port exists
 		ser_port = os.path.normpath(SERIAL_PORT_DEVICE)
 		self.assertTrue(os.path.exists(ser_port))	# Serial unit testing hardware device exists?
@@ -126,8 +126,8 @@ class TestSerialData(unittest.TestCase):
 			readTimeout=1.0,
 			writeTimeout=None,
 			interCharTimeout=None)
-		ser.txThread = txThread.TxThread('TX Thread', 1, ser)
-		ser.rxThread = rxThread.RxThread('RX Thread', 2, ser)
+		ser.txThread = txThread.TxThread('TX Thread', ser)
+		ser.rxThread = rxThread.RxThread('RX Thread', ser)
 		# verify the port exists
 		ser_port = os.path.normpath(SERIAL_PORT_DEVICE)
 		self.assertTrue(os.path.exists(ser_port))	# Serial unit testing hardware device exists?
@@ -147,8 +147,8 @@ class TestSerialData(unittest.TestCase):
 			readTimeout=1.0,
 			writeTimeout=None,
 			interCharTimeout=None)
-		ser.txThread = txThread.TxThread('TX Thread', 1, ser)
-		ser.rxThread = rxThread.RxThread('RX Thread', 2, ser)
+		ser.txThread = txThread.TxThread('TX Thread', ser)
+		ser.rxThread = rxThread.RxThread('RX Thread', ser)
 		# verify the port exists
 		ser_port = os.path.normpath(SERIAL_PORT_DEVICE)
 		self.assertTrue(os.path.exists(ser_port))	# Serial unit testing hardware device exists?
@@ -169,8 +169,8 @@ class TestSerialData(unittest.TestCase):
 			readTimeout=1.0,
 			writeTimeout=None,
 			interCharTimeout=None)
-		ser.txThread = txThread.TxThread('TX Thread', 1, ser)
-		ser.rxThread = rxThread.RxThread('RX Thread', 2, ser)
+		ser.txThread = txThread.TxThread('TX Thread', ser)
+		ser.rxThread = rxThread.RxThread('RX Thread', ser)
 		# verify the port exists
 		ser_port = os.path.normpath(SERIAL_PORT_DEVICE)
 		self.assertTrue(os.path.exists(ser_port))	# Serial unit testing hardware device exists?
@@ -197,8 +197,8 @@ class TestSerialData(unittest.TestCase):
 			readTimeout=1.0,
 			writeTimeout=None,
 			interCharTimeout=None)
-		ser.txThread = txThread.TxThread('TX Thread', 1, ser)
-		ser.rxThread = rxThread.RxThread('RX Thread', 2, ser)
+		ser.txThread = txThread.TxThread('TX Thread', ser)
+		ser.rxThread = rxThread.RxThread('RX Thread', ser)
 		# verify the port exists
 		ser_port = os.path.normpath(SERIAL_PORT_DEVICE)
 		self.assertTrue(os.path.exists(ser_port))	# Serial unit testing hardware device exists?
@@ -228,8 +228,8 @@ class TestSerialData(unittest.TestCase):
 			readTimeout=1.0,
 			writeTimeout=None,
 			interCharTimeout=None)
-		ser.txThread = txThread.TxThread('TX Thread', 1, ser)
-		ser.rxThread = rxThread.RxThread('RX Thread', 2, ser)
+		ser.txThread = txThread.TxThread('TX Thread', ser)
+		ser.rxThread = rxThread.RxThread('RX Thread', ser)
 		# verify the port exists
 		ser_port = os.path.normpath(SERIAL_PORT_DEVICE)
 		self.assertTrue(os.path.exists(ser_port))	# Serial unit testing hardware device exists?
@@ -260,8 +260,8 @@ class TestSerialData(unittest.TestCase):
 			readTimeout=1.0,
 			writeTimeout=None,
 			interCharTimeout=None)
-		ser.txThread = txThread.TxThread('TX Thread', 1, ser)
-		ser.rxThread = rxThread.RxThread('RX Thread', 2, ser)
+		ser.txThread = txThread.TxThread('TX Thread', ser)
+		ser.rxThread = rxThread.RxThread('RX Thread', ser)
 		# verify the port exists
 		ser_port = os.path.normpath(SERIAL_PORT_DEVICE)
 		self.assertTrue(os.path.exists(ser_port))	# Serial unit testing hardware device exists?
@@ -282,8 +282,8 @@ class TestSerialData(unittest.TestCase):
 			readTimeout=1.0,
 			writeTimeout=None,
 			interCharTimeout=None)
-		ser.txThread = txThread.TxThread('TX Thread', 1, ser)
-		ser.rxThread = rxThread.RxThread('RX Thread', 2, ser)
+		ser.txThread = txThread.TxThread('TX Thread', ser)
+		ser.rxThread = rxThread.RxThread('RX Thread', ser)
 		# verify the port exists
 		ser_port = os.path.normpath(SERIAL_PORT_DEVICE)
 		self.assertTrue(os.path.exists(ser_port))	# Serial unit testing hardware device exists?
@@ -309,8 +309,8 @@ class TestSerialData(unittest.TestCase):
 			readTimeout=1.0,
 			writeTimeout=None,
 			interCharTimeout=None)
-		ser.txThread = txThread.TxThread('TX Thread', 1, ser)
-		ser.rxThread = rxThread.RxThread('RX Thread', 2, ser)
+		ser.txThread = txThread.TxThread('TX Thread', ser)
+		ser.rxThread = rxThread.RxThread('RX Thread', ser)
 		# verify the port exists
 		ser_port = os.path.normpath(SERIAL_PORT_DEVICE)
 		self.assertTrue(os.path.exists(ser_port))	# Serial unit testing hardware device exists?
@@ -342,8 +342,8 @@ class TestSerialData(unittest.TestCase):
 			readTimeout=1.0,
 			writeTimeout=None,
 			interCharTimeout=None)
-		ser.txThread = txThread.TxThread('TX Thread', 1, ser)
-		ser.rxThread = rxThread.RxThread('RX Thread', 2, ser)
+		ser.txThread = txThread.TxThread('TX Thread', ser)
+		ser.rxThread = rxThread.RxThread('RX Thread', ser)
 		# verify the port exists
 		ser_port = os.path.normpath(SERIAL_PORT_DEVICE)
 		self.assertTrue(os.path.exists(ser_port))	# Serial unit testing hardware device exists?

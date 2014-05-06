@@ -79,7 +79,7 @@ class SerialData(serial.Serial):
 			self.msgQueue.put((None, {'port':self.port}, CREATE_SERIAL_PORT))
 	
 	def set_serial_mode(self, mode=None):
-		def modeIn(self, mode):
+		def modeIn(mode):
 			if ((isinstance(mode, str) or isinstance(mode, unicode)) and
 			    (unicode(mode.upper()) in SerialData.LXM_SERIAL_TYPES.keys())):
 				return SerialData.LXM_SERIAL_TYPES[mode]
@@ -100,21 +100,21 @@ class SerialData(serial.Serial):
 			'ports': [{}, {}, {}, {},]
 		}]
 		if isinstance(mode, tuple) and len(mode) is 8:
-			for mode_index in range(0:4):
-				settings.cards[0]['ports'][mode_index]['type'] = self.modeIn(mode[mode_index])
-			for mode_index in range(4:8):
-				settings.cards[1]['ports'][mode_index]['type'] = self.modeIn(mode[mode_index])
+			for mode_index in range(0, 4):
+				settings.cards[0]['ports'][mode_index]['type'] = modeIn(mode[mode_index])
+			for mode_index in range(0, 4):
+				settings.cards[1]['ports'][mode_index]['type'] = modeIn(mode[mode_index])
 		elif isinstance(mode, str) or isinstance(mode, unicode) or isinstance(mode, int):
 			mode = modeIn(mode)
-			for mode_index in range(0:4):
+			for mode_index in range(0, 4):
 				settings.cards[0]['ports'][mode_index]['type'] = mode
-			for mode_index in range(4:8):
+			for mode_index in range(0, 4):
 				settings.cards[1]['ports'][mode_index]['type'] = mode
 		else:
 			mode = 'Loopback'
-			for mode_index in range(0:4):
+			for mode_index in range(0, 4):
 				settings.cards[0]['ports'][mode_index]['type'] = mode
-			for mode_index in range(4:8):
+			for mode_index in range(0, 4):
 				settings.cards[1]['ports'][mode_index]['type'] = mode
 		settings.apply()
 
