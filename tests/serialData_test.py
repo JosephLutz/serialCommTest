@@ -71,6 +71,7 @@ class TestSerialData(unittest.TestCase):
 		# test the msgQueue gets a message (a message is a tupe of three items)
 		msg = msgQueue.get()
 		self.assertTrue(isinstance(msg, tuple) and len(msg) is 3)
+	
 	def test_set_serial_mode(self):
 		self.assertTrue(serialData.SERIAL_SETTINGS)
 		msgQueue = Queue.Queue()
@@ -137,6 +138,7 @@ class TestSerialData(unittest.TestCase):
 		# Close the port
 		ser.closeSerialPort()
 		self.assertFalse(ser.isOpen())
+	
 	def test_threadSendStartup(self):
 		msgQueue = Queue.Queue()
 		pktGen = packetGenerator.PacketGenerator('unitTest', 1, msgQueue, 20, True, 'Seed String')

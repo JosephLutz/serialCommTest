@@ -44,9 +44,9 @@ class TxThread(threading.Thread):
 			# thread starting code
 			self.dataSendObj.threadSendStartup()
 			if TxThread._ENABLE_SYNC_RX_TX_THREADS:
-				#if self.msgQueue:
-				#	# notify 'RX thread ready' using msgQueue
-				#	self.msgQueue.put((self.threadID, None, THREAD_READY))
+				if self.msgQueue:
+					# notify 'RX thread ready' using msgQueue
+					self.msgQueue.put((self.threadID, None, THREAD_READY))
 				if not self.syncRxTxEvent.is_set():
 					self.syncRxTxEvent.set()
 			# block untill event is set in other thread
@@ -77,11 +77,15 @@ class TxThread(threading.Thread):
 				# notify 'thread stopped' using msgQueue
 				self.msgQueue.put((self.threadID, None, STOPPED))
 		except:
+			if not self.syncRxTxEvent.is_set():
+				self.syncRxTxEvent.set()
 			self.running = False
-			#try:
-			#	self.runLock.release()
-			#except:
-			#	pass
+			try:
+				# may cause aditional error if lock is held
+				# and in particular place in code flow
+				self.runLock.release()
+			except:
+				pass
 			raise
 
 if __name__ == '__main__':

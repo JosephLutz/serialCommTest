@@ -75,17 +75,21 @@ class TestRxThread(unittest.TestCase):
 			self.assertFalse(rx.syncRxTxEvent.is_set())
 			rx.start()
 			rx.syncRxTxEvent.wait()
+			rx.runLock.acquire()
 			self.assertTrue(rx.syncRxTxEvent.is_set())
 			self.assertTrue(rx.running)
 			self.assertTrue(sendObj.test_threadGetStartup)
 			self.assertFalse(threadEvent.is_set())
 			threadEvent.set()
-			# Allow thread switch
+			rx.runLock.release()
+			# Allow context switch and release of threadEvent.wait()
 			time.sleep(0.001)
+			rx.runLock.acquire()
 			self.assertTrue(threadEvent.is_set())
 			self.assertTrue(sendObj.test_threadGetStart)
+			rx.runLock.release()
 			startTime = time.time()
-			# run the thread for 3 seconds
+			# run the thread for 1.5 seconds
 			while (time.time() - startTime) < 1.5:
 				self.assertTrue(sendObj.test_getData)
 			sendObj.dataSendObjLock.acquire()
