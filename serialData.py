@@ -13,14 +13,19 @@ import serial
 import select
 import termios
 import time
+import sys
 import os
+if (sys.hexversion < 0x020100f0):
+	import TERMIOS
+else:
+	TERMIOS = termios
 
 class SerialData(serial.Serial):
 	'''
 	Used by the txThread and rxThread as the dataSendObj and dataGetObj.
 	'''
 	_READ_SIZE = 512            #number of characters to read at a time
-	_ENABLE_TCDRAIN = False     #use tcdrain to determine when the last character was transmitted
+	_ENABLE_TCDRAIN = True     #use tcdrain to determine when the last character was transmitted
 	_ENABLE_RTS_LINE = True     #Use the RTS line, _WARMUP_TIME, and _COOLDOWN_TIME
 	_ENABLE_DTR_LINE = True     #Use the DTR line
 	_WARMUP_TIME = 0.001        #Time from setting RTS to sending the first character
