@@ -68,7 +68,7 @@ class PacketGenerator(threading.Thread):
         self.queue = Queue.Queue()
         # number of packets to keep in the queue
         self.number = INITIAL_PACKET_NUMBER
-        # blocks openSerialPort untill at least one packet is ready
+        # blocks open_serial_port untill at least one packet is ready
         self.packetUsed = threading.Event()
         # seed and init random numbers
         if seed is None:

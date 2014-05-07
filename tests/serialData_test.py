@@ -112,10 +112,10 @@ class TestSerialData(unittest.TestCase):
 		ser_port = os.path.normpath(SERIAL_PORT_DEVICE)
 		self.assertTrue(os.path.exists(ser_port))	# Serial unit testing hardware device exists?
 		#test the port is opened and configured
-		ser.openSerialPort()
+		ser.open_serial_port()
 		self.assertTrue(ser.isOpen())
 		# Close the port
-		ser.closeSerialPort()
+		ser.close_serial_port()
 		self.assertFalse(ser.isOpen())
 	def test_ClosePort(self):
 		msgQueue = Queue.Queue()
@@ -133,10 +133,10 @@ class TestSerialData(unittest.TestCase):
 		ser_port = os.path.normpath(SERIAL_PORT_DEVICE)
 		self.assertTrue(os.path.exists(ser_port))	# Serial unit testing hardware device exists?
 		#test the port is opened and configured
-		ser.openSerialPort()
+		ser.open_serial_port()
 		self.assertTrue(ser.isOpen())
 		# Close the port
-		ser.closeSerialPort()
+		ser.close_serial_port()
 		self.assertFalse(ser.isOpen())
 	
 	def test_threadSendStartup(self):
@@ -156,10 +156,10 @@ class TestSerialData(unittest.TestCase):
 		self.assertTrue(os.path.exists(ser_port))	# Serial unit testing hardware device exists?
 		#test the port is opened, configured, and threading variables are configured
 		self.assertFalse(ser.isOpen())
-		ser.threadSendStartup()
+		ser.thread_send_startup()
 		self.assertTrue(ser.isOpen())
 		# Close the port
-		ser.closeSerialPort()
+		ser.close_serial_port()
 		self.assertFalse(ser.isOpen())
 	def test_threadSendStart(self):
 		msgQueue = Queue.Queue()
@@ -178,15 +178,15 @@ class TestSerialData(unittest.TestCase):
 		self.assertTrue(os.path.exists(ser_port))	# Serial unit testing hardware device exists?
 		#test the port is opened, configured, and threading variables are configured
 		self.assertFalse(ser.isOpen())
-		ser.threadSendStartup()
+		ser.thread_send_startup()
 		self.assertTrue(ser.isOpen())
 		try:
-			ser.threadSendStart()
+			ser.thread_send_start()
 		except:
 			assertTrue(False)
 		# Close the port
 		self.assertTrue(ser.isOpen())
-		ser.closeSerialPort()
+		ser.close_serial_port()
 		self.assertFalse(ser.isOpen())
 	def test_threadSendData(self):
 		msgQueue = Queue.Queue()
@@ -206,19 +206,19 @@ class TestSerialData(unittest.TestCase):
 		self.assertTrue(os.path.exists(ser_port))	# Serial unit testing hardware device exists?
 		#test the port is opened, configured, and threading variables are configured
 		self.assertFalse(ser.isOpen())
-		ser.threadSendStartup()
+		ser.thread_send_startup()
 		self.assertTrue(ser.isOpen())
 		try:
-			ser.threadSendStart()
+			ser.thread_send_start()
 		except:
 			assertTrue(False)
 		# test sending a packet of data
-		self.assertTrue(ser.sendData())
+		self.assertTrue(ser.send_data())
 		# test sending a packet of data when no data exists in queue
-		self.assertFalse(ser.sendData())
+		self.assertFalse(ser.send_data())
 		# Close the port
 		self.assertTrue(ser.isOpen())
-		ser.closeSerialPort()
+		ser.close_serial_port()
 		self.assertFalse(ser.isOpen())
 	def test_threadSendStop(self):
 		msgQueue = Queue.Queue()
@@ -237,19 +237,19 @@ class TestSerialData(unittest.TestCase):
 		self.assertTrue(os.path.exists(ser_port))	# Serial unit testing hardware device exists?
 		#test the port is opened, configured, and threading variables are configured
 		self.assertFalse(ser.isOpen())
-		ser.threadSendStartup()
+		ser.thread_send_startup()
 		self.assertTrue(ser.isOpen())
 		try:
-			ser.threadSendStart()
+			ser.thread_send_start()
 		except:
 			assertTrue(False)
 		try:
-			ser.threadSendStop()
+			ser.thread_send_stop()
 		except:
 			assertTrue(False)
 		# Close the port
 		self.assertTrue(ser.isOpen())
-		ser.closeSerialPort()
+		ser.close_serial_port()
 		self.assertFalse(ser.isOpen())
 
 	def test_threadGetStartup(self):
@@ -269,10 +269,10 @@ class TestSerialData(unittest.TestCase):
 		self.assertTrue(os.path.exists(ser_port))	# Serial unit testing hardware device exists?
 		#test the port is opened, configured, and threading variables are configured
 		self.assertFalse(ser.isOpen())
-		ser.threadGetStartup()
+		ser.thread_get_startup()
 		self.assertTrue(ser.isOpen())
 		# Close the port
-		ser.closeSerialPort()
+		ser.close_serial_port()
 		self.assertFalse(ser.isOpen())
 	def test_threadGetStart(self):
 		msgQueue = Queue.Queue()
@@ -290,15 +290,15 @@ class TestSerialData(unittest.TestCase):
 		ser_port = os.path.normpath(SERIAL_PORT_DEVICE)
 		self.assertTrue(os.path.exists(ser_port))	# Serial unit testing hardware device exists?
 		#test the port is opened, configured, and threading variables are configured
-		ser.threadGetStartup()
+		ser.thread_get_startup()
 		self.assertTrue(ser.isOpen())
 		try:
-			ser.threadGetStart()
+			ser.thread_get_start()
 		except:
 			assertTrue(False)
 		# Close the port
 		self.assertTrue(ser.isOpen())
-		ser.closeSerialPort()
+		ser.close_serial_port()
 		self.assertFalse(ser.isOpen())
 	def test_threadGetData(self):
 		msgQueue = Queue.Queue()
@@ -317,22 +317,22 @@ class TestSerialData(unittest.TestCase):
 		ser_port = os.path.normpath(SERIAL_PORT_DEVICE)
 		self.assertTrue(os.path.exists(ser_port))	# Serial unit testing hardware device exists?
 		#test the port is opened, configured, and threading variables are configured
-		ser.threadGetStartup()
+		ser.thread_get_startup()
 		self.assertTrue(ser.isOpen())
 		try:
-			ser.threadGetStart()
+			ser.thread_get_start()
 		except:
 			assertTrue(False)
 		# test recieving a packet of data when none is in the queue sent.
 		ser.flushInput()
-		self.assertFalse(ser.getData())
+		self.assertFalse(ser.get_data())
 		# test sending a packet of data
-		self.assertTrue(ser.sendData())
+		self.assertTrue(ser.send_data())
 		# test recieving a packet of data. (since loopback should be same data as sent)
-		self.assertTrue(ser.getData())
+		self.assertTrue(ser.get_data())
 		# Close the port
 		self.assertTrue(ser.isOpen())
-		ser.closeSerialPort()
+		ser.close_serial_port()
 		self.assertFalse(ser.isOpen())
 	def test_threadGetStop(self):
 		msgQueue = Queue.Queue()
@@ -351,19 +351,19 @@ class TestSerialData(unittest.TestCase):
 		self.assertTrue(os.path.exists(ser_port))	# Serial unit testing hardware device exists?
 		#test the port is opened, configured, and threading variables are configured
 		self.assertFalse(ser.isOpen())
-		ser.threadGetStartup()
+		ser.thread_get_startup()
 		self.assertTrue(ser.isOpen())
 		try:
-			ser.threadGetStart()
+			ser.thread_get_start()
 		except:
 			assertTrue(False)
 		try:
-			ser.threadGetStop()
+			ser.thread_get_stop()
 		except:
 			assertTrue(False)
 		# Close the port
 		self.assertTrue(ser.isOpen())
-		ser.closeSerialPort()
+		ser.close_serial_port()
 		self.assertFalse(ser.isOpen())
 
 def runtests():

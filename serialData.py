@@ -22,7 +22,7 @@ else:
 
 class SerialData(serial.Serial):
 	'''
-	Used by the txThread and rxThread as the dataSendObj and dataGetObj.
+	Used by the txThread and rxThread as the DataSendObj and dataGetObj.
 	'''
 	_READ_SIZE = 512            #number of characters to read at a time
 	_ENABLE_TCDRAIN = True     #use tcdrain to determine when the last character was transmitted
@@ -123,7 +123,7 @@ class SerialData(serial.Serial):
 				settings.cards[1]['ports'][mode_index]['type'] = mode
 		settings.apply()
 
-	def openSerialPort(self):
+	def open_serial_port(self):
 		self.portLock.acquire()
 		if not self.isOpen():
 			if not os.path.exists(self.port):
@@ -165,7 +165,7 @@ class SerialData(serial.Serial):
 			self.msgQueue.put((self.txThread.threadID, {'port':self.port}, PORT_OPENED))
 		self.portLock.release()
 		return True
-	def closeSerialPort(self):
+	def close_serial_port(self):
 		self.portLock.acquire()
 		if self.isOpen():
 			if SerialData._ENABLE_RTS_LINE:
@@ -183,19 +183,19 @@ class SerialData(serial.Serial):
 	#
 	# These methods determine how the port is used
 	#
-	def threadSendStartup(self):
+	def thread_send_startup(self):
 		self.sentPackets = []
 		# opent the port
-		if not self.openSerialPort():
+		if not self.open_serial_port():
 			raise BaseException
-	def threadSendStart(self):
+	def thread_send_start(self):
 		if SerialData._ENABLE_RTS_LINE:
 			self.portLock.acquire()
 			# set RTS to on
 			self.setRTS(True)
 			self.portLock.release()
 			time.sleep(SerialData._WARMUP_TIME)
-	def sendData(self):
+	def send_data(self):
 		start_time = time.time()
 		if self.packetSource.queue.empty():
 			return False
@@ -226,7 +226,7 @@ class SerialData(serial.Serial):
 		# store tuple of packet info: (packetID, packetLength, hash)
 		self.sentPackets.append(dataTuple[1:])
 		return True
-	def threadSendStop(self):
+	def thread_send_stop(self):
 		if (self.fd > 0):
 			if SerialData._ENABLE_RTS_LINE:
 				self.portLock.acquire()
@@ -240,15 +240,15 @@ class SerialData(serial.Serial):
 		if self.msgQueue is not None:
 			self.msgQueue.put((self.txThread.threadID, self.sentPackets, REPORT_DATA_RECIEVED))
 
-	def threadGetStartup(self):
+	def thread_get_startup(self):
 		# reset the readBuffer
 		self.readBuffer = []
 		# open the port
-		if not self.openSerialPort():
+		if not self.open_serial_port():
 			raise BaseException
-	def threadGetStart(self):
+	def thread_get_start(self):
 		pass
-	def getData(self):
+	def get_data(self):
 		reading = True
 		bytes_read = 0
 		start_time = time.time()
@@ -263,7 +263,7 @@ class SerialData(serial.Serial):
 		if bytes_read is 0:
 			return False
 		return True
-	def threadGetStop(self):
+	def thread_get_stop(self):
 		# send the readBuffer in the message queue
 		if self.msgQueue is not None:
 			self.msgQueue.put((self.txThread.threadID, self.readBuffer, 'Data read before timeout.'))

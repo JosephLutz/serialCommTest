@@ -29,3 +29,10 @@ MAX_PACKET_LENGTH = 65535
 #Largest packet number
 # TODO: need to make the packetID rollover when it reaches this number
 MAX_PACKET_ID = 1024
+
+
+#
+# RxThread and TxThread config values
+#
+
+ENABLE_SYNC_RX_TX_THREADS = True

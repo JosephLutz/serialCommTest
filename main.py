@@ -31,7 +31,7 @@ def try_run_threads(port_threads):
 		for (threadEvent, rx, tx) in port_threads:
 			tx.start()
 			rx.start()
-		# wait for rx and tx to both dataGetObj.threadGetStartup() (open serial port) and then to sync
+		# wait for rx and tx to both dataGetObj.thread_get_startup() (open serial port) and then to sync
 		while len(ports_not_released) is not 0:
 			release = []
 			# Allow context switch
