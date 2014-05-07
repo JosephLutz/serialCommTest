@@ -126,7 +126,7 @@ def main():
 	threadId = 1
 	msgQueue = Queue.Queue()
 	pktGenThread = packetGenerator.PacketGenerator('PacketGenerator',
-		threadID=threadId, msgQueue=msgQueue, bytes=BYTES,
+		threadID=threadId, msgQueue=msgQueue, numBytes=BYTES,
 		printableChars=False)
 	try:
 		pktGenThread.start()
