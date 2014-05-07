@@ -204,7 +204,7 @@ def main():
 				for baud in baudrates:
 					print ('Testing port {port} at {baud} baudrate with {packet_size} bytes of data.'.format(port=ser.port, baud=baud, packet_size=packet_size))
 					write_test(rxThread=rxThread,
-						read_timeout=QUEUE_READ_TIMEOUT,
+						read_timeout=(QUEUE_READ_TIMEOUT + (packet_size / 100)),
 						ser=ser, baud=baud, data_to_send=data[:packet_size],
 						write_size=WRITE_SIZE, write_delay=0.001, warm_up=WARMUP_TIME, cool_down=COOLDOWN_TIME)
 					time.sleep(TIME_BETWEEN_TESTS)
