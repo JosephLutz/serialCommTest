@@ -1,26 +1,31 @@
 # rs422_test
 
-from traceback import format_tb
+import traceback
 import threading
-from threading import Lock
 import termios
 import hashlib
 import random
 import select
 import serial
 import Queue
+import math
 import time
 import sys
 import os
+if (sys.hexversion < 0x020100f0):
+	import TERMIOS
+else:
+	TERMIOS = termios
 
-PORT = '/dev/ttyACM0'
+PORT = '/dev/ttyUSB0'
 
+PRINTABLE_CHARS = True
 USE_TCDRAIN = True
-DATA_DISPLAY_COLLS = 25
-MAX_DISPLAY_DATA = 600  # display at most 600 bytes
+DATA_DISPLAY_COLLS = 35
+MAX_DISPLAY_DATA = 6000  # display at most 600 bytes
 MAX_PACKET_SIZE = 10240
-TEST_TIMEOUT = 10.0
-TIME_BETWEEN_TESTS = 4.0
+QUEUE_READ_TIMEOUT = 3.0
+TIME_BETWEEN_TESTS = 1.0
 READ_SIZE = 512
 WRITE_SIZE = 512
 WARMUP_TIME   = 0.001
@@ -30,12 +35,11 @@ NUMBER_OF_LOOPS = 12
 baudrates = (115200, 57600, 38400, 28800, 19200, 14400, 9600, 4800, 2400, 1200)
 
 def get_rand_data(bytes, printableChars=True):
-	rand = random.SystemRandom()
-	if printableChars:
-		returnVal = ''.join([chr(rand.randint(33,127)) for i in range(bytes)])
-	else:
-		returnVal = ''.join([chr(rand.randint(1,255)) for i in range(bytes)])
-	return hashlib.sha1(returnVal).hexdigest() + returnVal
+    rand = random.SystemRandom()
+    if printableChars:
+        return ''.join([chr(rand.randint(33,126)) for i in range(bytes)])
+    else:
+        return ''.join([chr(rand.randint(1,255)) for i in range(bytes)])
 
 def setup_serial_port(port, read_timeout=None, write_timeout=None):
 	# create generic serial port object
@@ -59,13 +63,19 @@ def setup_serial_port(port, read_timeout=None, write_timeout=None):
 class RxThread(threading.Thread):
 	def __init__(self, name, threadID, ser):
 		threading.Thread.__init__(self)
-		self.running_lock = Lock()
+		self.running_lock = threading.Lock()
 		self.running = False
 		self.threadID = threadID
 		self.name = name
 		self.ser = ser
 		self.read_queue = Queue.Queue()
 	def run(self):
+		try:
+			if not self.ser.isOpen():
+				self.ser.open()
+		except serial.SerialException:
+			print ('serial.SerialException : Failure to open the port for reading')
+			raise BaseException
 		self.running_lock.acquire()
 		self.running = True
 		print ('Recieve thread started')
@@ -85,8 +95,8 @@ class RxThread(threading.Thread):
 				except serial.SerialTimeoutException:
 					pass
 				self.running_lock.acquire()
-		except:
-			print ('Exception in RxThread - Stopping RX')
+		except serial.SerialException:
+			print ('serial.SerialException in RxThread - Stopping RX')
 			try:
 				self.running_lock.release()
 			except:
@@ -94,6 +104,29 @@ class RxThread(threading.Thread):
 		else:
 			self.running_lock.release()
 		print ('RxThread is stopping')
+
+def print_data_diff(read_data, data_to_send):
+	max_len = max(len(read_data), len(data_to_send))
+	num_rows = min(
+		int(math.ceil(max_len / DATA_DISPLAY_COLLS) + 1),
+		int(math.ceil(MAX_DISPLAY_DATA / DATA_DISPLAY_COLLS) + 1))
+	print ('\n{tx_row:<{DATA_DISPLAY_COLLS}}  {rx_row:{DATA_DISPLAY_COLLS}}'.format(tx_row='TX Data', rx_row='RX Data', DATA_DISPLAY_COLLS=DATA_DISPLAY_COLLS))
+	for row_count in range(num_rows):
+		tx_row = ''
+		rx_row = ''
+		row_index = row_count * DATA_DISPLAY_COLLS
+		if len(data_to_send) > row_index:
+			remaining_data = (len(data_to_send) - row_index)
+			data_in_coll = min(remaining_data, DATA_DISPLAY_COLLS)
+			tx_row = data_to_send[row_index:(row_index + data_in_coll)]
+		if len(read_data) > row_index:
+			remaining_data = (len(read_data) - row_index)
+			data_in_coll = min(remaining_data, DATA_DISPLAY_COLLS)
+			rx_row = read_data[row_index:(row_index + data_in_coll)]
+		print ('{tx_row:<{DATA_DISPLAY_COLLS}}  {rx_row:{DATA_DISPLAY_COLLS}}'.format(tx_row=tx_row, rx_row=rx_row, DATA_DISPLAY_COLLS=DATA_DISPLAY_COLLS))
+	if max(len(read_data), len(data_to_send)) > MAX_DISPLAY_DATA:
+		print ('{moredata:<{DATA_DISPLAY_COLLS}}  {moredata:{DATA_DISPLAY_COLLS}}'.format(moredata='...', DATA_DISPLAY_COLLS=DATA_DISPLAY_COLLS))
+	print ('\n')
 
 def write_test(rxThread, read_timeout, ser, baud, data_to_send, write_size, write_delay, warm_up, cool_down):
 	try:
@@ -107,8 +140,8 @@ def write_test(rxThread, read_timeout, ser, baud, data_to_send, write_size, writ
 			iflag, oflag, cflag, lflag, ispeed, ospeed, cc = termios.tcgetattr(ser.fd)
 			iflag |= (TERMIOS.IGNBRK | TERMIOS.IGNPAR)
 			termios.tcsetattr(ser.fd, TERMIOS.TCSANOW, [iflag, oflag, cflag, lflag, ispeed, ospeed, cc])
-	except:
-		print ('Failure to change the baudrate to {0}.'.format(baud))
+	except serial.SerialException:
+		print ('serial.SerialException : Failure to change the baudrate to {0}.'.format(baud))
 		raise BaseException
 	# verify port is still open
 	if not ser.isOpen():
@@ -119,10 +152,11 @@ def write_test(rxThread, read_timeout, ser, baud, data_to_send, write_size, writ
 	ser.setRTS(True)
 	time.sleep(warm_up)
 	# start sending
-	while len(data_to_send) is not 0:
-		write_len = min(len(data_to_send), write_size)
-		ser.write(data_to_send[:write_len])
-		data_to_send = write_len[write_len:]
+	data = data_to_send[:]
+	while len(data) is not 0:
+		write_len = min(len(data), write_size)
+		ser.write(data[:write_len])
+		data = data[write_len:]
 		time.sleep(write_delay)
 	# set cool_down and RTS
 	if USE_TCDRAIN:
@@ -142,48 +176,64 @@ def write_test(rxThread, read_timeout, ser, baud, data_to_send, write_size, writ
 	read_start_time = time.time()
 	read_data = ''
 	while ((len(read_data) < len(data_to_send))  and ((time.time() - read_start_time) < read_timeout)):
-		(packet, packet_time) = rxThread.read_queue.get()
-		print ('recieved {len} bytes within {time:1.4} seconds'.format(len=len(packet), time=packet_time))
-		read_data += packet
+		try:
+			(packet, packet_time) = rxThread.read_queue.get(True, read_timeout)
+			print ('recieved {len} bytes within {time:1.4} seconds'.format(len=len(packet), time=packet_time))
+			read_data += packet
+		except Queue.Empty:
+			pass
 	if (len(read_data) is not len(data_to_send)):
 		print ('The TX and RX data does not match - Length is different')
 	if (read_data == data_to_send):
 		print ('Recieved all the transmitted data !!!')
+		#print_data_diff(read_data, data_to_send)
 	else:
 		print ('The TX and RX data does not match - different data')
-		if max(len(read_data), len(data_to_send)) < MAX_DISPLAY_DATA:
-			print ('\n{tx_row:<{DATA_DISPLAY_COLLS}}  {rx_row:{DATA_DISPLAY_COLLS}}'.format(tx_row='TX Data', rx_row='RX Data', DATA_DISPLAY_COLLS=DATA_DISPLAY_COLLS))
-			for row_count in range((max(len(read_data), len(data_to_send)) / DATA_DISPLAY_COLLS)):
-				tx_row = ''
-				rx_row = ''
-				row_index = row_count * DATA_DISPLAY_COLLS
-				if len(data_to_send) > row_index:
-					tx_row = data_to_send[row_index:(row_index + min(DATA_DISPLAY_COLLS, (len(data_to_send) - row_index)))]
-				if len(read_data) > row_index:
-					rx_row = read_data[row_index:(row_index + min(DATA_DISPLAY_COLLS, (len(read_data) - row_index)))]
-				print ('{tx_row:<{DATA_DISPLAY_COLLS}}  {rx_row:{DATA_DISPLAY_COLLS}}'.format(tx_row=tx_row, rx_row=rx_row, DATA_DISPLAY_COLLS=DATA_DISPLAY_COLLS))
-			print ('\n')
-		else:
-			print ('Too much data to display\n\n')
+		print_data_diff(read_data, data_to_send)
 
 def main():
 	print ('Generate {0} bytes of random data'.format(MAX_PACKET_SIZE))
-	data = get_rand_data(MAX_PACKET_SIZE, printableChars=False)
-	ser = setup_serial_port(PORT, 1.0, 1.0)
+	data = get_rand_data(MAX_PACKET_SIZE, printableChars=PRINTABLE_CHARS)
+	print_data_diff(data, data)
+	ser = setup_serial_port(PORT, 0.01, 0.01)
 	rxThread = RxThread('Recieve thread', 0, ser)
-	for count in range(NUMBER_OF_LOOPS):
-		for packet_size in [x for x in range(1, MAX_PACKET_SIZE)]:
-			for baud in baudrates:
-				print ('Testing port {port} at {baud} baudrate with {packet_size} bytes of data.'.format(port=ser.port, baud=baud, packet_size=packet_size))
-				write_test(rxThread=rxThread,
-					read_timeout=(TEST_TIMEOUT * int(baudrates.index(baud)/4 + 1)),
-					ser=ser, baud=baud, data_to_send=data[:packet_size],
-					write_size=WRITE_SIZE, write_delay=0.001, warm_up=WARMUP_TIME, cool_down=COOLDOWN_TIME)
-				time.sleep(TIME_BETWEEN_TESTS)
-	rxThread.running_lock.acquire()
-	rxThread.running = False
-	rxThread.running_lock.release()
-	rxThread.join()
+	try:
+		rxThread.start()
+		for count in range(NUMBER_OF_LOOPS):
+			for packet_size in [x for x in range(1, MAX_PACKET_SIZE)]:
+				for baud in baudrates:
+					print ('Testing port {port} at {baud} baudrate with {packet_size} bytes of data.'.format(port=ser.port, baud=baud, packet_size=packet_size))
+					write_test(rxThread=rxThread,
+						read_timeout=QUEUE_READ_TIMEOUT,
+						ser=ser, baud=baud, data_to_send=data[:packet_size],
+						write_size=WRITE_SIZE, write_delay=0.001, warm_up=WARMUP_TIME, cool_down=COOLDOWN_TIME)
+					time.sleep(TIME_BETWEEN_TESTS)
+	except:
+		rxThread.running = False
+		print ('\n\n::::: caught exception :::::\n' + getExceptionInfo())
+		try:
+			rxThread.running_lock.release()
+		except:
+			pass
+	else:
+		rxThread.running_lock.acquire()
+		rxThread.running = False
+		rxThread.running_lock.release()
+	finally:
+		rxThread.join()
+
+def getExceptionInfo():
+	exc_type, exc_obj, exc_tb = sys.exc_info()
+	fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+	if (exc_type is None or exc_obj is None or exc_tb is None):
+		return 'No Exception Encountered'
+	error_out = 'Exception Encountered'
+	error_out += '{0}\n'.format('='*80)
+	error_out += 'lineno:{lineno}, fname:{fname}'.format(fname=fname, lineno=exc_tb.tb_lineno)
+	for line in traceback.format_tb(exc_tb):
+		error_out += '{0}\n'.format(line)
+	return ('\n{line:80}\n{out}\n{line:80}'.format(line='#'*80, out=error_out))
+
 
 if __name__ == '__main__':
 	main()

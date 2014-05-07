@@ -78,7 +78,7 @@ def get_state(ser_ports, msg_queue):
 def get_rand_data(bytes, printableChars=True):
 	rand = random.SystemRandom()
 	if printableChars:
-		returnVal = ''.join([chr(rand.randint(33,127)) for i in range(bytes)])
+		returnVal = ''.join([chr(rand.randint(33,126)) for i in range(bytes)])
 	else:
 		returnVal = ''.join([chr(rand.randint(1,255)) for i in range(bytes)])
 	return hashlib.sha1(returnVal).hexdigest() + returnVal
