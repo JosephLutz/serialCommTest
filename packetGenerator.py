@@ -67,7 +67,7 @@ class PacketGenerator(threading.Thread):
 		if msgQueue:
 			msgQueue.put((None, {'bytes':bytes}, GENERATE_DATA))
 		if printableChars:
-			self.randomData = ''.join([chr(self.rand.randint(33,127)) for i in range(bytes)])
+			self.randomData = ''.join([chr(self.rand.randint(33,126)) for i in range(bytes)])
 		else:
 			self.randomData = ''.join([chr(self.rand.randint(1,255)) for i in range(bytes)])
 		# the next index of self.randomData to start gathering the data for the next packet
