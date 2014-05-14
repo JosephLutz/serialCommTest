@@ -7,8 +7,6 @@ import time
 
 from config import *
 
-from msgMonitor import GENERATE_DATA
-
 
 #Max length of the data portion of the packet
 _MAX_PACKET_DATA_LENGTH = MAX_PACKET_LENGTH - (PACKET_GENERATOR_HASHLIB_ALGORITHM().digest_size + (len(struct.pack('!H', 0)) * 2))

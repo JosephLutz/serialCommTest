@@ -15,6 +15,7 @@ if __name__ == '__main__':
 
 # Module to test
 import rxThread
+import threadMonitor
 
 
 def get_exception_info():
@@ -65,25 +66,23 @@ class DataSendObj():
 class TestRxThread(unittest.TestCase):
     def test_object_creation(self):
         sendObj = DataSendObj()
-        msgQueue = Queue.Queue()
         threadEvent = threading.Event()
         # test that the object is created with minimal arguments
         rx = rxThread.RxThread('unitTest', sendObj)
         self.assertTrue(isinstance(rx, rxThread.RxThread))
         rx = None
         # test that the object is created with all arguments
-        rx = rxThread.RxThread('unitTest', sendObj, 1, msgQueue, threadEvent)
+        rx = rxThread.RxThread('unitTest', sendObj, threadEvent)
         self.assertTrue(isinstance(rx, rxThread.RxThread))
         # test the msgQueue gets a message (a message is a tupe of three items)
-        msg = msgQueue.get()
+        msg = threadMonitor.msgQueue.get()
         self.assertTrue(isinstance(msg, tuple) and len(msg) is 3)
 
     def test_thread(self):
         testAssert = True
         sendObj = DataSendObj()
-        msgQueue = Queue.Queue()
         threadEvent = threading.Event()
-        rx = rxThread.RxThread('unitTest', sendObj, 1, msgQueue, threadEvent)
+        rx = rxThread.RxThread('unitTest', sendObj, threadEvent)
         try:
             self.assertFalse(rx.syncRxTxEvent.is_set())
             rx.start()

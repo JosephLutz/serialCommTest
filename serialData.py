@@ -1,10 +1,6 @@
 # serialData
 
 from OrionPythonModules import serial_settings
-from msgMonitor import CREATE_SERIAL_PORT
-from msgMonitor import PORT_OPENED
-from msgMonitor import PORT_CLOSED
-from msgMonitor import REPORT_DATA_RECIEVED
 import threading
 import serial
 import select
@@ -121,8 +117,8 @@ class SerialData(serial.Serial):
         if not self.isOpen():
             if not os.path.exists(self.port):
                 if self.msgQueue is not None:
-                    self.msgQueue.put((self.txThread.threadID, None,
-                                       'Serial port {port} does not exist.'.format(port=self.port)))
+                    self.msgQueue.put((self.txThread.threadID, {'port': self.port},
+                        PORT_NOT_EXIST))
                 self.portLock.release()
                 return False
             try:
@@ -131,21 +127,17 @@ class SerialData(serial.Serial):
                 if not os.path.exists(self.port):
                     if self.msgQueue is not None:
                         self.msgQueue.put(
-                            (self.txThread.threadID, None,
-                             ('SerialException while opening port {port}, ' +
-                              'and the port dissapeared after open atempt.'.format(port=self.port))))
+                            (self.txThread.threadID, {'port': self.port}, SERIALEXCEPTION_OPEN_DISAPEAR))
                 else:
                     if self.msgQueue is not None:
                         self.msgQueue.put(
-                            (self.txThread.threadID, None,
-                             'SerialException while opening port {port}.'.format(port=self.port)))
+                            (self.txThread.threadID, {'port': self.port}, SERIALEXCEPTION_OPEN))
                 self.portLock.release()
                 return False
             if not self.isOpen():
                 if self.msgQueue is not None:
                     self.msgQueue.put(
-                        (self.txThread.threadID, None,
-                         'Serial port {port} would not open with specified port configuration.'.format(port=self.port)))
+                        (self.txThread.threadID, {'port': self.port}, PORT_NOT_OPEN))
                 self.portLock.release()
                 return False
             if ENABLE_RTS_LINE:
@@ -157,11 +149,14 @@ class SerialData(serial.Serial):
                 # set DTR to on
                 self.setDTR(True)
             if ENABLE_TCDRAIN:
-                iflag, oflag, cflag, lflag, ispeed, ospeed, cc = termios.tcgetattr(self.fd)
+                (iflag, oflag, cflag, lflag, ispeed, ospeed, cc) = (
+                    termios.tcgetattr(self.fd))
                 iflag |= (TERMIOS.IGNBRK | TERMIOS.IGNPAR)
-                termios.tcsetattr(self.fd, TERMIOS.TCSANOW, [iflag, oflag, cflag, lflag, ispeed, ospeed, cc])
+                termios.tcsetattr(self.fd, TERMIOS.TCSANOW,
+                    [iflag, oflag, cflag, lflag, ispeed, ospeed, cc])
         if self.msgQueue is not None:
-            self.msgQueue.put((self.txThread.threadID, {'port': self.port}, PORT_OPENED))
+            self.msgQueue.put((self.txThread.threadID, {'port': self.port},
+                SERIAL_PORT_OPENED))
         self.portLock.release()
         return True
 
@@ -177,7 +172,8 @@ class SerialData(serial.Serial):
             # close the port
             self.close()
         if self.msgQueue is not None:
-            self.msgQueue.put((self.txThread.threadID, {'port': self.port}, PORT_CLOSED))
+            self.msgQueue.put((self.txThread.threadID, {'port': self.port},
+                SERIAL_PORT_CLOSED))
         self.portLock.release()
 
     #
@@ -214,17 +210,26 @@ class SerialData(serial.Serial):
         try:
             if self.msgQueue is not None:
                 self.msgQueue.put(
-                    (self.txThread.threadID, None,
-                     'Started  TX on {packetLength} byte packet {packetID} @ {time}'.format(
-                         packetID=dataTuple[1], time=(time.time() - start_time), packetLength=dataTuple[2])))
+                    (   self.txThread.threadID,
+                        {   'packetID': dataTuple[1],
+                            'time': (time.time() - start_time),
+                            'packetLength': dataTuple[2],
+                        },
+                        START_PACKET,
+                    ))
             self.write(dataTuple[0])
             if self.msgQueue is not None:
-                self.msgQueue.put(self.txThread.threadID, None,
-                    'Finished TX on {packetLength} byte packet {packetID} @ {time}'.format(
-                        packetID=dataTuple[1], time=(time.time() - start_time), packetLength=dataTuple[2]))
+                self.msgQueue.put(
+                    (   self.txThread.threadID,
+                        {   'packetID': dataTuple[1],
+                            'time': (time.time() - start_time),
+                            'packetLength': dataTuple[2]
+                        },
+                        FINISH_PACKET,)
+                    )
         except serial.SerialTimeoutException:
             if self.msgQueue is not None:
-                self.msgQueue.put(self.txThread.threadID, None, 'SerialException durring packet write')
+                self.msgQueue.put((self.txThread.threadID, {}, SERIAL_TIMEOUT))
             return False
         # store tuple of packet info: (packetID, packetLength, hash)
         self.sentPackets.append(dataTuple[1:])
@@ -242,7 +247,12 @@ class SerialData(serial.Serial):
                 self.portLock.release()
         # use the message queue to send self.sentPackets
         if self.msgQueue is not None:
-            self.msgQueue.put((self.txThread.threadID, self.sentPackets, REPORT_DATA_RECIEVED))
+            self.msgQueue.put(
+                (   self.txThread.threadID,
+                    {   SPECIAL_MSG_DATA_KEYS[SPECIAL_MSG__SENT_DATA]: self.sentPackets,
+                    },
+                    REPORT_SENT_DATA
+                ))
 
     def thread_get_startup(self):
         # reset the readBuffer
@@ -273,7 +283,12 @@ class SerialData(serial.Serial):
     def thread_get_stop(self):
         # send the readBuffer in the message queue
         if self.msgQueue is not None:
-            self.msgQueue.put((self.txThread.threadID, self.readBuffer, 'Data read before timeout.'))
+            self.msgQueue.put(
+                (   self.txThread.threadID,
+                    {   SPECIAL_MSG_DATA_KEYS[SPECIAL_MSG__RECIEVED_DATA]: self.readBuffer,
+                    },
+                    REPORT_RECIEVED_DATA,
+                ))
 
 
 if __name__ == '__main__':

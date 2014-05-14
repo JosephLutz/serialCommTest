@@ -63,3 +63,74 @@ SERIAL_PORT_WARMUP_TIME = 0.001
 #Time from last character sent to clearing RTS
 SERIAL_PORT_COOLDOWN_TIME =1.0
 
+
+
+#
+# msgMonitor configuration
+#
+
+
+#
+# msgMonitor values
+#
+
+# Special keys used to transfer other data (in msgQueue), than string
+# formatting arguments.
+SPECIAL_MSG_DATA_KEYS = (
+	# list of sent packets
+	#     [(packetID, packetLength, hash), ...]
+	'SENT_DATA',
+	# data recieved (list of tuples, each containing data read and time since last read)
+	#     [(data, time), ...]
+	'RECIEVED_DATA',
+)
+# descriptive index number to SPECIAL_MSG_DATA_KEYS
+SPECIAL_MSG__SENT_DATA, SPECIAL_MSG__RECIEVED_DATA = (0, 1)
+
+
+# common thread messages. Use messageQueueMessages with these keys to refrence
+# the common message.
+(
+	THREAD_CREATED,
+	THREAD_READY,
+	THREAD_SYNC_WAIT,
+	THREAD_STARTING,
+	THREAD_STOPPED,
+	GENERATE_DATA,
+	CREATE_SERIAL_PORT,
+	SERIAL_PORT_OPENED,
+	SERIAL_PORT_CLOSED,
+	PORT_NOT_EXIST,
+	SERIALEXCEPTION_OPEN_DISAPEAR,
+	SERIALEXCEPTION_OPEN,
+	PORT_NOT_OPEN,
+	START_PACKET,
+	FINISH_PACKET,
+	SERIAL_TIMEOUT,
+	REPORT_SENT_DATA,
+	REPORT_RECIEVED_DATA,
+) = range(18)
+# message Queue text for the messages
+messageQueueMessages = {
+	# rxThread and txThread
+	THREAD_CREATED: u'{thread_type} THREAD CREATED',
+	THREAD_READY: u'{thread_type} THREAD READY',
+	THREAD_SYNC_WAIT: u'{thread_type} THREAD SYNC WAIT',
+	THREAD_STARTING: u'{thread_type} THREAD STARTING',
+	THREAD_STOPPED: u'{thread_type} THREAD STOPPED',
+	# packetGenerator
+	GENERATE_DATA: u'Generating {bytes} bytes of random data for packet data',
+	#serialData
+	CREATE_SERIAL_PORT: u'Created serial port {port}',
+	SERIAL_PORT_OPENED: u'Serial port {port} opened',
+	SERIAL_PORT_CLOSED: u'Serial port {port} closed',
+	PORT_NOT_EXIST: u'Serial port {port} does not exist.',
+	SERIALEXCEPTION_OPEN_DISAPEAR: u'SerialException while opening port {port}, and the port dissapeared after open atempt.',
+	SERIALEXCEPTION_OPEN: u'SerialException while opening port {port}.',
+	PORT_NOT_OPEN: u'Serial port {port} would not open with specified port configuration.',
+	START_PACKET: u'Started TX on {packetLength} byte packet {packetID} @ {time}',
+	FINISH_PACKET: u'Finished TX on {packetLength} byte packet {packetID} @ {time}',
+	SERIAL_TIMEOUT: u'SerialTimeoutException durring packet write',
+	REPORT_SENT_DATA: u'Data recieved',
+	REPORT_RECIEVED_DATA: u'Data read before timeout.',
+}
