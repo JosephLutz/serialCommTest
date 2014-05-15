@@ -66,6 +66,16 @@ SERIAL_PORT_COOLDOWN_TIME =1.0
 
 
 #
+# threadMonitor configuration
+#
+
+START_THREAD_ID = 1
+# MAX_THREAD_ID = 65535
+MAX_THREAD_ID = 65
+
+
+
+#
 # msgMonitor configuration
 #
 
