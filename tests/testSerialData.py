@@ -247,7 +247,7 @@ class TestSerialData(unittest.TestCase):
         pktGen.running = False
         pktGen.runLock.release()
         pktGen.join()
-    '''
+    
     def test_thread_send_data(self):
         pktGen = packetGenerator.PacketGenerator(max_queue_size=1,
             num_rand_bytes=2000, printable_chars=True, seed='Seed String',
@@ -268,24 +268,30 @@ class TestSerialData(unittest.TestCase):
         self.assertFalse(ser.isOpen())
         ser.thread_send_startup()
         self.assertTrue(ser.isOpen())
-        # block pktGen from creating any more packets
-        pktGen.runLock.acquire()
-        self.assertTrue(ser.packet_tuple is None)
-        self.assertFalse(pktGen.queue.empty())
         try:
-            self.assertTrue(ser.thread_send_start())
+            # block pktGen from creating any more packets
+            pktGen.runLock.acquire()
+            # give the pktGen thread time to block on the runLock
+            time.sleep(0.1 + PACKET_GENERATOR_TIMEOUT)
+            self.assertTrue(ser.packet_tuple is None)
+            self.assertFalse(pktGen.queue.empty())
+            try:
+                self.assertTrue(ser.thread_send_start())
+            except:
+                self.assertTrue(False)
+            self.assertFalse(ser.packet_tuple is None)
+            self.assertTrue(pktGen.queue.empty())
+            # test sending a packet of data
+            self.assertTrue(ser.send_data())
+            # test sending a packet of data when no data exists in queue
+            self.assertTrue(ser.packet_tuple is None)
+            #self.assertTrue(pktGen.queue.empty())
+            self.assertFalse(ser.send_data())
+            # release pktGen
+            pktGen.runLock.release()
         except:
-            self.assertTrue(False)
-        self.assertFalse(ser.packet_tuple is None)
-        self.assertTrue(pktGen.queue.empty())
-        # test sending a packet of data
-        self.assertTrue(ser.send_data())
-        # test sending a packet of data when no data exists in queue
-        self.assertTrue(ser.packet_tuple is None)
-        self.assertTrue(pktGen.queue.empty())
-        self.assertFalse(ser.send_data())
-        # release pktGen
-        pktGen.runLock.release()
+            pktGen.runLock.release()
+            raise
         # Close the port
         self.assertTrue(ser.isOpen())
         ser.close_serial_port()
@@ -295,7 +301,7 @@ class TestSerialData(unittest.TestCase):
         pktGen.running = False
         pktGen.runLock.release()
         pktGen.join()
-    '''
+    
     def test_thread_send_stop(self):
         pktGen = packetGenerator.PacketGenerator(max_queue_size=1,
             num_rand_bytes=2000, printable_chars=True, seed='Seed String',
@@ -482,3 +488,5 @@ def runtests():
 
 if __name__ == '__main__':
     runtests()
+    #suite = unittest.TestLoader().loadTestsFromTestCase(TestSerialData)
+    #unittest.TextTestRunner(verbosity=2).run(suite)
