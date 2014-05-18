@@ -1,14 +1,15 @@
 import hashlib
+import struct
 
 #
 # Config values for packetGenerator class
 #
 
 # Initial number of packets in the queue
-INITIAL_PACKET_NUMBER = 0
+INITIAL_PACKET_NUMBER = 10
 
 # Wait time before checking the thread is still running
-PACKET_GENERATOR_WAIT_TIMEOUT = 1.0
+PACKET_GENERATOR_TIMEOUT = 1.0
 
 # The size of the packets to generate.
 #  random lengths (within constraints) if set to None
@@ -25,6 +26,12 @@ MIN_PACKET_DATA_LENGTH = 10
 
 #Length of the largest packet
 MAX_PACKET_LENGTH = 65535
+
+#Max length of the data portion of the packet
+MAX_PACKET_DATA_LENGTH = MAX_PACKET_LENGTH - (PACKET_GENERATOR_HASHLIB_ALGORITHM().digest_size + (len(struct.pack('!H', 0)) * 2))
+
+#Minimum length of the packet
+MIN_PACKET_LENGTH = (MAX_PACKET_LENGTH - MAX_PACKET_DATA_LENGTH) + MIN_PACKET_DATA_LENGTH
 
 #Largest packet number
 # TODO: need to make the packetID rollover when it reaches this number
@@ -56,6 +63,9 @@ ENABLE_RTS_LINE = True
 
 #Use the DTR line
 ENABLE_DTR_LINE = True
+
+# amount of time to wait for the Queue to give us the next packet
+SERIAL_PORT_QUEUE_TIME = 3.0
 
 #Time from setting RTS to sending the first character
 SERIAL_PORT_WARMUP_TIME = 0.001
@@ -119,7 +129,7 @@ SPECIAL_MSG__SENT_DATA, SPECIAL_MSG__RECIEVED_DATA = (0, 1)
 	SERIAL_TIMEOUT,
 	REPORT_SENT_DATA,
 	REPORT_RECIEVED_DATA,
-) = range(18)
+) = xrange(18)
 # message Queue text for the messages
 messageQueueMessages = {
 	# rxThread and txThread
@@ -129,7 +139,7 @@ messageQueueMessages = {
 	THREAD_STARTING: u'{thread_type} THREAD STARTING',
 	THREAD_STOPPED: u'{thread_type} THREAD STOPPED',
 	# packetGenerator
-	GENERATE_DATA: u'Generating {bytes} bytes of random data for packet data',
+	GENERATE_DATA: u'Generating {num_rand_bytes} bytes of random data for packet data',
 	#serialData
 	CREATE_SERIAL_PORT: u'Created serial port {port}',
 	SERIAL_PORT_OPENED: u'Serial port {port} opened',

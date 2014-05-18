@@ -9,6 +9,7 @@ import Queue
 import time
 import sys
 import os
+import threadMonitor
 
 if sys.hexversion < 0x020100f0:
     import TERMIOS
@@ -31,44 +32,60 @@ class SerialData(serial.Serial):
         None: LXM_MODE_VALUES[3],
     }
 
-    def __init__(self, port, packetSource, msgQueue=None, readTimeout=SERIAL_PORT_READ_TIMEOUT, writeTimeout=None,
-                 interCharTimeout=None):
-        serial.Serial.__init__(self,
-                 port = None,                       #number of device, numbering starts at
-                                                    #zero. if everything fails, the user
-                                                    #can specify a device string, note
-                                                    #that this isn't portable anymore
-                                                    #port will be opened if one is specified
-                 baudrate=115200,                   #baudrate
-                 bytesize=serial.EIGHTBITS,         #number of databits
-                 parity=serial.PARITY_NONE,         #enable parity checking
-                 stopbits=serial.STOPBITS_ONE,      #number of stopbits
-                 timeout=readTimeout,               #set a timeout value, None to wait forever
-                 xonxoff=0,                         #enable software flow control
-                 rtscts=0,                          #enable RTS/CTS flow control
-                 writeTimeout=writeTimeout,         #set a timeout for writes
-                 dsrdtr=None,                       #None: use rtscts setting, dsrdtr override if true or false
-                 interCharTimeout=interCharTimeout  #Inter-character timeout, None to disable
-                 )
+    def __init__(self, port, packet_source, read_timeout=SERIAL_PORT_READ_TIMEOUT,
+            write_timeout=None, inter_char_timeout=None, *args, **kwargs):
+        super(SerialData, self).__init__(
+            #number of device, numbering starts at
+            #zero. if everything fails, the user
+            #can specify a device string, note
+            #that this isn't portable anymore
+            #port will be opened if one is specified
+            port=None,
+            #baudrate
+            baudrate=115200,
+            #number of databits
+            bytesize=serial.EIGHTBITS,
+            #enable parity checking
+            parity=serial.PARITY_NONE,
+            #number of stopbits
+            stopbits=serial.STOPBITS_ONE,
+            #set a timeout value, None to wait forever
+            timeout=read_timeout,
+            #enable software flow control
+            xonxoff=0,
+            #enable RTS/CTS flow control
+            rtscts=0,
+            #set a timeout for writes
+            writeTimeout=write_timeout,
+            #None: use rtscts setting, dsrdtr override if true or false
+            dsrdtr=None,
+            #Inter-character timeout, None to disable
+            interCharTimeout=inter_char_timeout,
+            *args, **kwargs)
         if isinstance(port, str) or isinstance(port, unicode):
             self.port = os.path.normpath(port)
         else:
             # Using an intiger is not as reliable (A guess is made).
             self.port = port
         # Queue for sending state back to messaging thread
-        self.msgQueue = msgQueue
+        self.msgQueue = threadMonitor.ThreadMonitor.msgQueue
         # lock for when a thread needs exclusive access to the serial port
-        self.portLock = threading.Lock()     # lock exclusive use of hardware
+        # lock exclusive use of hardware
+        self.portLock = threading.Lock()
+        # the next packet queued up to send
+        self.packet_tuple = None
         # list of sent packet information
-        self.sentPackets = []   #[(packetID, packetLength, hash), ...]
+        # FORMAT: [(packetID, packetLength, hash), ...]
+        self.sentPackets = []
         # place holder populated when the txThread is created
         self.txThread = None
         # data recieved (list of tuples, each containing data read and time since last read)
-        self.readBuffer = []    # [(data, time), ...]
+        # FORMAT: [(data, time), ...]
+        self.readBuffer = []
         # place holder populated when the rxThread is created
         self.rxThread = None
         # Queue that holds data packets to be sent
-        self.packetSource = packetSource
+        self.packet_source = packet_source
         if self.msgQueue is not None:
             self.msgQueue.put((None, {'port': self.port}, CREATE_SERIAL_PORT))
 
@@ -94,21 +111,21 @@ class SerialData(serial.Serial):
             'ports': [{}, {}, {}, {}, ]
         }]
         if isinstance(mode, tuple) and len(mode) is 8:
-            for mode_index in range(0, 4):
+            for mode_index in xrange(0, 4):
                 settings.cards[0]['ports'][mode_index]['type'] = mode_in(mode[mode_index])
-            for mode_index in range(0, 4):
+            for mode_index in xrange(0, 4):
                 settings.cards[1]['ports'][mode_index]['type'] = mode_in(mode[mode_index])
         elif isinstance(mode, str) or isinstance(mode, unicode) or isinstance(mode, int):
             mode = mode_in(mode)
-            for mode_index in range(0, 4):
+            for mode_index in xrange(0, 4):
                 settings.cards[0]['ports'][mode_index]['type'] = mode
-            for mode_index in range(0, 4):
+            for mode_index in xrange(0, 4):
                 settings.cards[1]['ports'][mode_index]['type'] = mode
         else:
             mode = 'Loopback'
-            for mode_index in range(0, 4):
+            for mode_index in xrange(0, 4):
                 settings.cards[0]['ports'][mode_index]['type'] = mode
-            for mode_index in range(0, 4):
+            for mode_index in xrange(0, 4):
                 settings.cards[1]['ports'][mode_index]['type'] = mode
         settings.apply()
 
@@ -186,53 +203,59 @@ class SerialData(serial.Serial):
             raise BaseException
 
     def thread_send_start(self):
+        try:
+            if self.packet_tuple is None:
+                self.packet_tuple = self.packet_source.queue.get(block=True, timeout=SERIAL_PORT_QUEUE_TIME)
+        except Queue.Empty:
+            return False
         if ENABLE_RTS_LINE:
             self.portLock.acquire()
             # set RTS to on
             self.setRTS(True)
             self.portLock.release()
             time.sleep(SERIAL_PORT_WARMUP_TIME)
+        return True
 
     def send_data(self):
         start_time = time.time()
-        if self.packetSource.queue.empty():
-            return False
-        # get the dataTuple from the Queue
-        dataTuple = None
+        # get the self.packet_tuple from the Queue.
+        # First time there should already be a packet in self.packet_tuple
         try:
-            while dataTuple is None:
-                dataTuple = self.packetSource.queue.get_nowait()
+            if self.packet_tuple is None:
+                self.packet_tuple = self.packet_source.queue.get(block=True, timeout=SERIAL_PORT_QUEUE_TIME)
         except Queue.Empty:
             return False
-        # notify we are using a packet
-        self.packetSource.packetUsed.set()
         # write the data
         try:
             if self.msgQueue is not None:
                 self.msgQueue.put(
                     (   self.txThread.threadID,
-                        {   'packetID': dataTuple[1],
+                        {   'packetID': self.packet_tuple[1],
                             'time': (time.time() - start_time),
-                            'packetLength': dataTuple[2],
+                            'packetLength': self.packet_tuple[2],
                         },
                         START_PACKET,
                     ))
-            self.write(dataTuple[0])
+            self.write(self.packet_tuple[0])
             if self.msgQueue is not None:
                 self.msgQueue.put(
                     (   self.txThread.threadID,
-                        {   'packetID': dataTuple[1],
+                        {   'packetID': self.packet_tuple[1],
                             'time': (time.time() - start_time),
-                            'packetLength': dataTuple[2]
+                            'packetLength': self.packet_tuple[2]
                         },
                         FINISH_PACKET,)
                     )
         except serial.SerialTimeoutException:
             if self.msgQueue is not None:
                 self.msgQueue.put((self.txThread.threadID, {}, SERIAL_TIMEOUT))
+            # This packet gets dropped
+            self.packet_tuple = None
             return False
-        # store tuple of packet info: (packetID, packetLength, hash)
-        self.sentPackets.append(dataTuple[1:])
+        # store tuple of packet info, everything except the data: (packetID, packetLength, hash)
+        self.sentPackets.append(self.packet_tuple[1:])
+        # keep track that the next time we need to get a packet from the queue
+        self.packet_tuple = None
         return True
 
     def thread_send_stop(self):
@@ -253,6 +276,8 @@ class SerialData(serial.Serial):
                     },
                     REPORT_SENT_DATA
                 ))
+        # if there was a packet in self.packet_tuple it will get dropped (NOTE: I think this will always be None already)
+        self.packet_tuple = None
 
     def thread_get_startup(self):
         # reset the readBuffer

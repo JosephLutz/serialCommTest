@@ -15,6 +15,8 @@ if __name__ == '__main__':
 
 # Module to test
 import packetGenerator
+import threadMonitor
+from config import *
 
 
 def get_exception_info():
@@ -37,78 +39,138 @@ def get_exception_info():
 
 
 class TestPacketGenerator(unittest.TestCase):
+    def setUp(self):
+        packetGenerator.PacketGenerator.allocated_lock.acquire()
+        packetGenerator.PacketGenerator.allocated = set()
+        packetGenerator.PacketGenerator.ALLOCATABLE_PACKET_ID = set(xrange(MAX_PACKET_ID))
+        packetGenerator.PacketGenerator.allocated_lock.release()
+        packetGenerator.PacketGenerator.allocated_lock = threading.Lock()
+        threadMonitor.ThreadMonitor.threadMapLock.acquire()
+        threadMonitor.ThreadMonitor.threadMap = {}
+        threadMonitor.ThreadMonitor.threadMapLock.release()
+        threadMonitor.ThreadMonitor.threadMapLock = threading.Lock()
+        threadMonitor.ThreadMonitor.msgQueue = Queue.Queue()
+    
     def test_object_creation(self):
-        msgQueue = Queue.Queue()
         # test that the object is created with minimal arguments
-        pktGen = packetGenerator.PacketGenerator('unitTest', 1)
+        pktGen = packetGenerator.PacketGenerator()
         self.assertTrue(isinstance(pktGen, packetGenerator.PacketGenerator))
         pktGen = None
         # test that the object is created with all arguments
-        pktGen = packetGenerator.PacketGenerator('unitTest', 1, msgQueue, 2, True, 'Seed String')
+        pktGen = packetGenerator.PacketGenerator(max_queue_size=10,
+            num_rand_bytes=10000, printable_chars=True, seed='Seed String',
+            name='PacketGenerator-unittest')
         self.assertTrue(isinstance(pktGen, packetGenerator.PacketGenerator))
         # test the msgQueue gets a message (a message is a tupe of three items)
-        msg = msgQueue.get()
+        msg = threadMonitor.ThreadMonitor.msgQueue.get()
         self.assertTrue(isinstance(msg, tuple) and len(msg) is 3)
-
-    def test_make_packets(self):
-        pktGen = packetGenerator.PacketGenerator('unitTest', 1, numBytes=2)
+    
+    def test_make_packet(self):
+        pktGen = packetGenerator.PacketGenerator(max_queue_size=1,
+            num_rand_bytes=10000, printable_chars=True,
+            name='PacketGenerator-unittest')
         self.assertTrue(pktGen.queue.empty())
-        pktGen.makePackets(1)
-        self.assertFalse(pktGen.queue.empty())
-        packet = pktGen.queue.get()
-        self.assertTrue(isinstance(packet, tuple) and len(packet) is 4)
+        packet = pktGen.makePacket()
+        self.assertTrue(isinstance(packet, tuple))
+        self.assertTrue(len(packet) is 4)
+        self.assertTrue(packet[2] <= MAX_PACKET_LENGTH)
+        self.assertTrue(packet[2] >= MIN_PACKET_LENGTH)
+    
+    def test_change_packet_length(self):
+        packet_count = 0
+        pktGen = packetGenerator.PacketGenerator(max_queue_size=1,
+            num_rand_bytes=10000, printable_chars=True,
+            name='PacketGenerator-unittest')
         self.assertTrue(pktGen.queue.empty())
-
-    def test_thread(self):
-        testAssert = True
-        pktGen = packetGenerator.PacketGenerator('unitTest', 1, numBytes=2)
         try:
-            pktGen.start()
-            self.assertTrue(pktGen.queue.empty())
-            # tell thread to create some packets
-            pktGen.runLock.acquire()
-            pktGen.number = 1
-            pktGen.runLock.release()
-            # give time to create first packets
-            time.sleep(2.0)
-            startTime = time.time()
-            # run the thread for 3 seconds
-            while (time.time() - startTime) < 3.0:
-                pktGen.runLock.acquire()  # lock around calls that need to be atomic
-                self.assertFalse(pktGen.queue.empty())
-                queueSize = pktGen.queue.qsize()
-                pktGen.runLock.release()
-                # pull packet off of Queue
-                pktGen.runLock.acquire()  # lock around calls that need to be atomic
-                pktGen.queue.get()
-                newQueueSize = pktGen.queue.qsize()
-                self.assertTrue((newQueueSize + 1) is queueSize)
-                pktGen.packetUsed.set()
-                pktGen.runLock.release()
-                # wait some time for the new packet to be generated
-                time.sleep(0.3)
-                pktGen.runLock.acquire()  # lock around calls that need to be atomic
-                newQueueSize = pktGen.queue.qsize()
-                self.assertTrue(newQueueSize is queueSize)
-                pktGen.runLock.release()
-            # Stop the thread
-            pktGen.runLock.acquire()
-            pktGen.running = False
-            pktGen.runLock.release()
+            pktGen.change_packet_length(packet_length=5)
+            self.assertTrue(False)
         except:
-            print '\n' + get_exception_info()
-            testAssert = False
-            # clean up the thread
-            if not pktGen.packetUsed.is_set():
-                pktGen.packetUsed.set()
-            pktGen.running = False
-            try:
-                pktGen.runLock.release()
-            except threading.ThreadError:
-                pass
+            self.assertTrue(True)
+        try:
+            pktGen.change_packet_length(packet_length=50)
+            self.assertTrue(True)
+        except:
+            self.assertTrue(False)
+        pktGen.start()
+        # pull packet off of Queue
+        packet = pktGen.queue.get()
+        self.assertTrue(isinstance(packet, tuple))
+        self.assertTrue(len(packet) is 4)
+        self.assertTrue(len(packet[0]) is 50)
+        self.assertTrue(packet[1] >= 0)
+        self.assertTrue(packet[1] <= MAX_PACKET_ID)
+        self.assertTrue(packet[2] is 50)
+        # difference between binary values and string representation using hex
+        self.assertTrue(len(packet[3]) == (PACKET_GENERATOR_HASHLIB_ALGORITHM().digest_size * 2))
+        # change the length
+        try:
+            pktGen.change_packet_length(packet_length=60)
+            self.assertTrue(True)
+        except:
+            self.assertTrue(False)
+        # pull packet off of Queue
+        packet = pktGen.queue.get()
+        self.assertTrue(isinstance(packet, tuple))
+        self.assertTrue(len(packet) is 4)
+        # length could be 50 or 60 depending what happened first, a new packet was generated,
+        # or the length was change and then a new packet was generated.
+        self.assertTrue((len(packet[0]) is 50) or (len(packet[0]) is 60))
+        self.assertTrue(packet[1] >= 0)
+        self.assertTrue(packet[1] <= MAX_PACKET_ID)
+        self.assertTrue((packet[2] is 50) or (packet[2] is 60))
+        # difference between binary values and string representation using hex
+        self.assertTrue(len(packet[3]) == (PACKET_GENERATOR_HASHLIB_ALGORITHM().digest_size * 2))
+        # pull packet off of Queue
+        packet = pktGen.queue.get()
+        self.assertTrue(isinstance(packet, tuple))
+        self.assertTrue(len(packet) is 4)
+        self.assertTrue(len(packet[0]) is 60)
+        self.assertTrue(packet[1] >= 0)
+        self.assertTrue(packet[1] <= MAX_PACKET_ID)
+        self.assertTrue(packet[2] is 60)
+        # Stop the thread
+        pktGen.runLock.acquire()
+        pktGen.running = False
+        pktGen.runLock.release()
+        # wait for the thread to terminate
         pktGen.join()
         self.assertTrue(pktGen.queue.empty())
-        self.assertTrue(testAssert)
+    
+    def test_thread(self):
+        packet_count = 0
+        pktGen = packetGenerator.PacketGenerator(max_queue_size=1,
+            num_rand_bytes=10000, printable_chars=True,
+            name='PacketGenerator-unittest')
+        self.assertTrue(pktGen.queue.empty())
+        # specify a packet size
+        try:
+            pktGen.change_packet_length(packet_length=50)
+            self.assertTrue(True)
+        except:
+            self.assertTrue(False)
+        pktGen.start()
+        # run the thread for 1 second
+        startTime = time.time()
+        while (time.time() - startTime) < 0.01:
+            # pull packet off of Queue
+            packet = pktGen.queue.get()
+            self.assertTrue(isinstance(packet, tuple))
+            self.assertTrue(len(packet) is 4)
+            self.assertTrue(len(packet[0]) is 50)
+            self.assertTrue(packet[1] >= 0)
+            self.assertTrue(packet[1] <= MAX_PACKET_ID)
+            self.assertTrue(packet[2] is 50)
+            # difference between binary values and string representation using hex
+            self.assertTrue(len(packet[3]) == (PACKET_GENERATOR_HASHLIB_ALGORITHM().digest_size * 2))
+            packet_count += 1
+        # Stop the thread
+        pktGen.runLock.acquire()
+        pktGen.running = False
+        pktGen.runLock.release()
+        # wait for the thread to terminate
+        pktGen.join()
+        self.assertTrue(pktGen.queue.empty())
 
 
 def runtests():

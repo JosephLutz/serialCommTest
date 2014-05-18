@@ -18,25 +18,6 @@ import rxThread
 import threadMonitor
 
 
-def get_exception_info():
-    """
-    Gathers information about a caught exception.
-    This is used when I cause other exceptions in an except clause
-
-    :rtype : string
-    """
-    exc_type, exc_obj, exc_tb = sys.exc_info()
-    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-    if exc_type is None or exc_obj is None or exc_tb is None:
-        return 'No Exception Encountered'
-    error_out = 'Exception Encountered'
-    error_out += '{0}\n'.format('=' * 80)
-    error_out += 'lineno:{lineno}, fname:{fname}'.format(fname=fname, lineno=exc_tb.tb_lineno)
-    for line in traceback.format_tb(exc_tb):
-        error_out += '{0}\n'.format(line)
-    return '\n{line:80}\n{out}\n{line:80}'.format(line='#' * 80, out=error_out)
-
-
 class DataSendObj():
     def __init__(self):
         self.test_threadGetStartup = False
@@ -64,25 +45,32 @@ class DataSendObj():
 
 
 class TestRxThread(unittest.TestCase):
+    def setUp(self):
+        threadMonitor.ThreadMonitor.threadMapLock.acquire()
+        threadMonitor.ThreadMonitor.threadMap = {}
+        threadMonitor.ThreadMonitor.threadMapLock.release()
+        threadMonitor.ThreadMonitor.threadMapLock = threading.Lock()
+        threadMonitor.ThreadMonitor.msgQueue = Queue.Queue()
+
     def test_object_creation(self):
         sendObj = DataSendObj()
         threadEvent = threading.Event()
         # test that the object is created with minimal arguments
-        rx = rxThread.RxThread('unitTest', sendObj)
+        rx = rxThread.RxThread(sendObj)
         self.assertTrue(isinstance(rx, rxThread.RxThread))
         rx = None
         # test that the object is created with all arguments
-        rx = rxThread.RxThread('unitTest', sendObj, threadEvent)
+        rx = rxThread.RxThread(sendObj, threadEvent, name='txThread-unittest-1')
         self.assertTrue(isinstance(rx, rxThread.RxThread))
         # test the msgQueue gets a message (a message is a tupe of three items)
-        msg = threadMonitor.msgQueue.get()
+        msg = threadMonitor.ThreadMonitor.msgQueue.get()
         self.assertTrue(isinstance(msg, tuple) and len(msg) is 3)
 
     def test_thread(self):
         testAssert = True
         sendObj = DataSendObj()
         threadEvent = threading.Event()
-        rx = rxThread.RxThread('unitTest', sendObj, threadEvent)
+        rx = rxThread.RxThread(sendObj, threadEvent, name='txThread-unittest-2')
         try:
             self.assertFalse(rx.syncRxTxEvent.is_set())
             rx.start()
@@ -102,7 +90,7 @@ class TestRxThread(unittest.TestCase):
             rx.runLock.release()
             startTime = time.time()
             # run the thread for 1.5 seconds
-            while (time.time() - startTime) < 1.5:
+            while (time.time() - startTime) < 0.05:
                 self.assertTrue(sendObj.test_getData)
             sendObj.dataSendObjLock.acquire()
             sendObj.loop = False
@@ -110,18 +98,11 @@ class TestRxThread(unittest.TestCase):
             time.sleep(0.01)
             self.assertTrue(sendObj.test_threadGetStop)
         except:
-            print '\n' + get_exception_info()
             testAssert = False
-            # clean up the thread
-            if not rx.syncRxTxEvent.is_set():
-                rx.syncRxTxEvent.set()
+            # clean-up
             if not threadEvent.is_set():
                 threadEvent.set()
-            rx.running = False
-            try:
-                rx.runLock.release()
-            except threading.ThreadError:
-                pass
+            raise
         rx.join()
         self.assertFalse(rx.running)
         self.assertTrue(testAssert)

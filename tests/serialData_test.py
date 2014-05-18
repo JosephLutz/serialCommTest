@@ -14,8 +14,10 @@ SERIAL_PORT_DEVICE = '/dev/ttyUSB0'
 #SERIAL_PORT_DEVICE = '/dev/serial/by-path/platform-musb-hdrc.0.auto-usb-0:1.1:1.0',
 
 import traceback
+import threading
 import unittest
 import Queue
+import time
 import sys
 import os
 
@@ -31,6 +33,8 @@ import serialData
 import packetGenerator
 import rxThread
 import txThread
+import threadMonitor
+from config import *
 
 
 def get_exception_info():
@@ -53,42 +57,57 @@ def get_exception_info():
 
 
 class TestSerialData(unittest.TestCase):
+    def setUp(self):
+        packetGenerator.PacketGenerator.allocated_lock.acquire()
+        packetGenerator.PacketGenerator.allocated = set()
+        packetGenerator.PacketGenerator.ALLOCATABLE_PACKET_ID = set(xrange(MAX_PACKET_ID))
+        packetGenerator.PacketGenerator.allocated_lock.release()
+        packetGenerator.PacketGenerator.allocated_lock = threading.Lock()
+        threadMonitor.ThreadMonitor.threadMapLock.acquire()
+        threadMonitor.ThreadMonitor.threadMap = {}
+        threadMonitor.ThreadMonitor.threadMapLock.release()
+        threadMonitor.ThreadMonitor.threadMapLock = threading.Lock()
+        threadMonitor.ThreadMonitor.msgQueue = Queue.Queue()
+    
     def test_serial_device_exists(self):
         ser_port = os.path.normpath(SERIAL_PORT_DEVICE)
         self.assertTrue(os.path.exists(ser_port))  # Serial unit testing hardware device exists?
-
+    
     def test_object_creation(self):
-        msgQueue = Queue.Queue()
-        pktGen = packetGenerator.PacketGenerator('unitTest', 1, msgQueue, 20, True, 'Seed String')
+        pktGen = packetGenerator.PacketGenerator(max_queue_size=1,
+            num_rand_bytes=2000, printable_chars=True, seed='Seed String',
+            name='PacketGenerator-unittest')
         # test the msgQueue gets a message (a message is a tupe of three items)
-        msg = msgQueue.get()
+        msg = threadMonitor.ThreadMonitor.msgQueue.get()
         self.assertTrue(isinstance(msg, tuple) and len(msg) is 3)
         # test simple object creation
+        # We are just throwing this serialData object away so no need to create a packet_source
         self.assertTrue(
-            isinstance(serialData.SerialData(port=SERIAL_PORT_DEVICE, packetSource=None), serialData.SerialData))
+            isinstance(serialData.SerialData(port=SERIAL_PORT_DEVICE, packet_source=None),
+                serialData.SerialData))
         # test that the object is created with all arguments
         ser = serialData.SerialData(
             port=SERIAL_PORT_DEVICE,
-            packetSource=pktGen,
-            msgQueue=msgQueue,
-            readTimeout=1.0,
-            writeTimeout=None,
-            interCharTimeout=None)
+            packet_source=None,
+            read_timeout=1.0,
+            write_timeout=None,
+            inter_char_timeout=None)
         self.assertTrue(isinstance(ser, serialData.SerialData))
         # test the msgQueue gets a message (a message is a tupe of three items)
-        msg = msgQueue.get()
+        msg = threadMonitor.ThreadMonitor.msgQueue.get()
         self.assertTrue(isinstance(msg, tuple) and len(msg) is 3)
-
+    
     def test_set_serial_mode(self):
-        msgQueue = Queue.Queue()
-        pktGen = packetGenerator.PacketGenerator('unitTest', 1, msgQueue, 20, True, 'Seed String')
+        pktGen = packetGenerator.PacketGenerator(max_queue_size=1,
+            num_rand_bytes=2000, printable_chars=True, seed='Seed String',
+            name='PacketGenerator-unittest')
+        pktGen.start()
         ser = serialData.SerialData(
             port=SERIAL_PORT_DEVICE,
-            packetSource=pktGen,
-            msgQueue=msgQueue,
-            readTimeout=1.0,
-            writeTimeout=None,
-            interCharTimeout=None)
+            packet_source=pktGen,
+            read_timeout=1.0,
+            write_timeout=None,
+            inter_char_timeout=None)
         # test setting the serial mode for all ports to the same thing using 'RS232'
         ser.set_serial_mode('RS232')
         # test setting the serial mode for all ports to the same thing using 'RS-485 2-wire'
@@ -102,66 +121,84 @@ class TestSerialData(unittest.TestCase):
         # test setting the serial mode for all ports using [0,0,0,0,] - set all to loopback, though not verifiable
         ser.set_serial_mode([0, 0, 0, 0, ])
         self.assertTrue(True)
+        # shut down pktGen
+        pktGen.runLock.acquire()
+        pktGen.running = False
+        pktGen.runLock.release()
+        pktGen.join()
 
     def test_open_port(self):
-        msgQueue = Queue.Queue()
-        pktGen = packetGenerator.PacketGenerator('unitTest', 1, msgQueue, 20, True, 'Seed String')
+        pktGen = packetGenerator.PacketGenerator(max_queue_size=1,
+            num_rand_bytes=2000, printable_chars=True, seed='Seed String',
+            name='PacketGenerator-unittest')
+        pktGen.start()
         ser = serialData.SerialData(
             port=SERIAL_PORT_DEVICE,
-            packetSource=pktGen,
-            msgQueue=msgQueue,
-            readTimeout=1.0,
-            writeTimeout=None,
-            interCharTimeout=None)
-        ser.txThread = txThread.TxThread('TX Thread', ser)
-        ser.rxThread = rxThread.RxThread('RX Thread', ser)
+            packet_source=pktGen,
+            read_timeout=1.0,
+            write_timeout=None,
+            inter_char_timeout=None)
         # verify the port exists
         ser_port = os.path.normpath(SERIAL_PORT_DEVICE)
         self.assertTrue(os.path.exists(ser_port))  # Serial unit testing hardware device exists?
+        # create the txThread just for it's threadID when sending msgs on msgQueue
+        ser.txThread = txThread.TxThread(ser, name='TX Thread for {0}'.format(os.path.basename(ser_port)))
         #test the port is opened and configured
         ser.open_serial_port()
         self.assertTrue(ser.isOpen())
         # Close the port
         ser.close_serial_port()
         self.assertFalse(ser.isOpen())
-
+        # shut down pktGen
+        pktGen.runLock.acquire()
+        pktGen.running = False
+        pktGen.runLock.release()
+        pktGen.join()
+    
     def test_close_port(self):
-        msgQueue = Queue.Queue()
-        pktGen = packetGenerator.PacketGenerator('unitTest', 1, msgQueue, 20, True, 'Seed String')
+        pktGen = packetGenerator.PacketGenerator(max_queue_size=1,
+            num_rand_bytes=2000, printable_chars=True, seed='Seed String',
+            name='PacketGenerator-unittest')
+        pktGen.start()
         ser = serialData.SerialData(
             port=SERIAL_PORT_DEVICE,
-            packetSource=pktGen,
-            msgQueue=msgQueue,
-            readTimeout=1.0,
-            writeTimeout=None,
-            interCharTimeout=None)
-        ser.txThread = txThread.TxThread('TX Thread', ser)
-        ser.rxThread = rxThread.RxThread('RX Thread', ser)
+            packet_source=pktGen,
+            read_timeout=1.0,
+            write_timeout=None,
+            inter_char_timeout=None)
         # verify the port exists
         ser_port = os.path.normpath(SERIAL_PORT_DEVICE)
         self.assertTrue(os.path.exists(ser_port))  # Serial unit testing hardware device exists?
+        # create the txThread just for it's threadID when sending msgs on msgQueue
+        ser.txThread = txThread.TxThread(ser, name='TX Thread for {0}'.format(os.path.basename(ser_port)))
         #test the port is opened and configured
         ser.open_serial_port()
         self.assertTrue(ser.isOpen())
         # Close the port
         ser.close_serial_port()
         self.assertFalse(ser.isOpen())
+        # shut down pktGen
+        pktGen.runLock.acquire()
+        pktGen.running = False
+        pktGen.runLock.release()
+        pktGen.join()
 
     def test_thread_send_startup(self):
-        msgQueue = Queue.Queue()
-        pktGen = packetGenerator.PacketGenerator('unitTest', 1, msgQueue, 20, True, 'Seed String')
+        pktGen = packetGenerator.PacketGenerator(max_queue_size=1,
+            num_rand_bytes=2000, printable_chars=True, seed='Seed String',
+            name='PacketGenerator-unittest')
+        pktGen.start()
         ser = serialData.SerialData(
             port=SERIAL_PORT_DEVICE,
-            packetSource=pktGen,
-            msgQueue=msgQueue,
-            readTimeout=1.0,
-            writeTimeout=None,
-            interCharTimeout=None)
-        ser.txThread = txThread.TxThread('TX Thread', ser)
-        ser.rxThread = rxThread.RxThread('RX Thread', ser)
+            packet_source=pktGen,
+            read_timeout=1.0,
+            write_timeout=None,
+            inter_char_timeout=None)
         # verify the port exists
         ser_port = os.path.normpath(SERIAL_PORT_DEVICE)
         self.assertTrue(os.path.exists(ser_port))  # Serial unit testing hardware device exists?
+        # create the txThread just for it's threadID when sending msgs on msgQueue
+        ser.txThread = txThread.TxThread(ser, name='TX Thread for {0}'.format(os.path.basename(ser_port)))
         #test the port is opened, configured, and threading variables are configured
         self.assertFalse(ser.isOpen())
         ser.thread_send_startup()
@@ -169,91 +206,122 @@ class TestSerialData(unittest.TestCase):
         # Close the port
         ser.close_serial_port()
         self.assertFalse(ser.isOpen())
-
+        # shut down pktGen
+        pktGen.runLock.acquire()
+        pktGen.running = False
+        pktGen.runLock.release()
+        pktGen.join()
+    
     def test_thread_send_start(self):
-        msgQueue = Queue.Queue()
-        pktGen = packetGenerator.PacketGenerator('unitTest', 1, msgQueue, 20, True, 'Seed String')
+        pktGen = packetGenerator.PacketGenerator(max_queue_size=1,
+            num_rand_bytes=2000, printable_chars=True, seed='Seed String',
+            name='PacketGenerator-unittest')
+        pktGen.start()
         ser = serialData.SerialData(
             port=SERIAL_PORT_DEVICE,
-            packetSource=pktGen,
-            msgQueue=msgQueue,
-            readTimeout=1.0,
-            writeTimeout=None,
-            interCharTimeout=None)
-        ser.txThread = txThread.TxThread('TX Thread', ser)
-        ser.rxThread = rxThread.RxThread('RX Thread', ser)
+            packet_source=pktGen,
+            read_timeout=1.0,
+            write_timeout=None,
+            inter_char_timeout=None)
         # verify the port exists
         ser_port = os.path.normpath(SERIAL_PORT_DEVICE)
         self.assertTrue(os.path.exists(ser_port))  # Serial unit testing hardware device exists?
+        # create the txThread just for it's threadID when sending msgs on msgQueue
+        ser.txThread = txThread.TxThread(ser, name='TX Thread for {0}'.format(os.path.basename(ser_port)))
         #test the port is opened, configured, and threading variables are configured
         self.assertFalse(ser.isOpen())
         ser.thread_send_startup()
         self.assertTrue(ser.isOpen())
+        self.assertTrue(ser.packet_tuple is None)
         try:
-            ser.thread_send_start()
+            self.assertTrue(ser.thread_send_start())
         except:
             self.assertTrue(False)
+        self.assertFalse(ser.packet_tuple is None)
         # Close the port
         self.assertTrue(ser.isOpen())
         ser.close_serial_port()
         self.assertFalse(ser.isOpen())
-
+        # shut down pktGen
+        pktGen.runLock.acquire()
+        pktGen.running = False
+        pktGen.runLock.release()
+        pktGen.join()
+    '''
     def test_thread_send_data(self):
-        msgQueue = Queue.Queue()
-        pktGen = packetGenerator.PacketGenerator('unitTest', 1, msgQueue, 20, True, 'Seed String')
-        pktGen.makePackets(1)
+        pktGen = packetGenerator.PacketGenerator(max_queue_size=1,
+            num_rand_bytes=2000, printable_chars=True, seed='Seed String',
+            name='PacketGenerator-unittest')
+        pktGen.start()
         ser = serialData.SerialData(
             port=SERIAL_PORT_DEVICE,
-            packetSource=pktGen,
-            msgQueue=msgQueue,
-            readTimeout=1.0,
-            writeTimeout=None,
-            interCharTimeout=None)
-        ser.txThread = txThread.TxThread('TX Thread', ser)
-        ser.rxThread = rxThread.RxThread('RX Thread', ser)
+            packet_source=pktGen,
+            read_timeout=1.0,
+            write_timeout=None,
+            inter_char_timeout=None)
         # verify the port exists
         ser_port = os.path.normpath(SERIAL_PORT_DEVICE)
         self.assertTrue(os.path.exists(ser_port))  # Serial unit testing hardware device exists?
+        # create the txThread just for it's threadID when sending msgs on msgQueue
+        ser.txThread = txThread.TxThread(ser, name='TX Thread for {0}'.format(os.path.basename(ser_port)))
         #test the port is opened, configured, and threading variables are configured
         self.assertFalse(ser.isOpen())
         ser.thread_send_startup()
         self.assertTrue(ser.isOpen())
+        # block pktGen from creating any more packets
+        pktGen.runLock.acquire()
+        self.assertTrue(ser.packet_tuple is None)
+        self.assertFalse(pktGen.queue.empty())
         try:
-            ser.thread_send_start()
+            self.assertTrue(ser.thread_send_start())
         except:
             self.assertTrue(False)
+        self.assertFalse(ser.packet_tuple is None)
+        self.assertTrue(pktGen.queue.empty())
         # test sending a packet of data
         self.assertTrue(ser.send_data())
         # test sending a packet of data when no data exists in queue
+        self.assertTrue(ser.packet_tuple is None)
+        self.assertTrue(pktGen.queue.empty())
         self.assertFalse(ser.send_data())
+        # release pktGen
+        pktGen.runLock.release()
         # Close the port
         self.assertTrue(ser.isOpen())
         ser.close_serial_port()
         self.assertFalse(ser.isOpen())
-
+        # shut down pktGen
+        pktGen.runLock.acquire()
+        pktGen.running = False
+        pktGen.runLock.release()
+        pktGen.join()
+    '''
     def test_thread_send_stop(self):
-        msgQueue = Queue.Queue()
-        pktGen = packetGenerator.PacketGenerator('unitTest', 1, msgQueue, 20, True, 'Seed String')
+        pktGen = packetGenerator.PacketGenerator(max_queue_size=1,
+            num_rand_bytes=2000, printable_chars=True, seed='Seed String',
+            name='PacketGenerator-unittest')
+        pktGen.start()
         ser = serialData.SerialData(
             port=SERIAL_PORT_DEVICE,
-            packetSource=pktGen,
-            msgQueue=msgQueue,
-            readTimeout=1.0,
-            writeTimeout=None,
-            interCharTimeout=None)
-        ser.txThread = txThread.TxThread('TX Thread', ser)
-        ser.rxThread = rxThread.RxThread('RX Thread', ser)
+            packet_source=pktGen,
+            read_timeout=1.0,
+            write_timeout=None,
+            inter_char_timeout=None)
         # verify the port exists
         ser_port = os.path.normpath(SERIAL_PORT_DEVICE)
         self.assertTrue(os.path.exists(ser_port))  # Serial unit testing hardware device exists?
+        # create the txThread just for it's threadID when sending msgs on msgQueue
+        ser.txThread = txThread.TxThread(ser, name='TX Thread for {0}'.format(os.path.basename(ser_port)))
         #test the port is opened, configured, and threading variables are configured
         self.assertFalse(ser.isOpen())
         ser.thread_send_startup()
         self.assertTrue(ser.isOpen())
+        self.assertTrue(ser.packet_tuple is None)
         try:
-            ser.thread_send_start()
+            self.assertTrue(ser.thread_send_start())
         except:
             self.assertTrue(False)
+        self.assertFalse(ser.packet_tuple is None)
         try:
             ser.thread_send_stop()
         except:
@@ -262,22 +330,28 @@ class TestSerialData(unittest.TestCase):
         self.assertTrue(ser.isOpen())
         ser.close_serial_port()
         self.assertFalse(ser.isOpen())
+        # shut down pktGen
+        pktGen.runLock.acquire()
+        pktGen.running = False
+        pktGen.runLock.release()
+        pktGen.join()
 
     def test_thread_get_startup(self):
-        msgQueue = Queue.Queue()
-        pktGen = packetGenerator.PacketGenerator('unitTest', 1, msgQueue, 20, True, 'Seed String')
+        pktGen = packetGenerator.PacketGenerator(max_queue_size=1,
+            num_rand_bytes=2000, printable_chars=True, seed='Seed String',
+            name='PacketGenerator-unittest')
+        pktGen.start()
         ser = serialData.SerialData(
             port=SERIAL_PORT_DEVICE,
-            packetSource=pktGen,
-            msgQueue=msgQueue,
-            readTimeout=1.0,
-            writeTimeout=None,
-            interCharTimeout=None)
-        ser.txThread = txThread.TxThread('TX Thread', ser)
-        ser.rxThread = rxThread.RxThread('RX Thread', ser)
+            packet_source=pktGen,
+            read_timeout=1.0,
+            write_timeout=None,
+            inter_char_timeout=None)
         # verify the port exists
         ser_port = os.path.normpath(SERIAL_PORT_DEVICE)
         self.assertTrue(os.path.exists(ser_port))  # Serial unit testing hardware device exists?
+        # create the txThread just for it's threadID when sending msgs on msgQueue
+        ser.txThread = txThread.TxThread(ser, name='TX Thread for {0}'.format(os.path.basename(ser_port)))
         #test the port is opened, configured, and threading variables are configured
         self.assertFalse(ser.isOpen())
         ser.thread_get_startup()
@@ -285,22 +359,28 @@ class TestSerialData(unittest.TestCase):
         # Close the port
         ser.close_serial_port()
         self.assertFalse(ser.isOpen())
+        # shut down pktGen
+        pktGen.runLock.acquire()
+        pktGen.running = False
+        pktGen.runLock.release()
+        pktGen.join()
 
     def test_thread_get_start(self):
-        msgQueue = Queue.Queue()
-        pktGen = packetGenerator.PacketGenerator('unitTest', 1, msgQueue, 20, True, 'Seed String')
+        pktGen = packetGenerator.PacketGenerator(max_queue_size=1,
+            num_rand_bytes=2000, printable_chars=True, seed='Seed String',
+            name='PacketGenerator-unittest')
+        pktGen.start()
         ser = serialData.SerialData(
             port=SERIAL_PORT_DEVICE,
-            packetSource=pktGen,
-            msgQueue=msgQueue,
-            readTimeout=1.0,
-            writeTimeout=None,
-            interCharTimeout=None)
-        ser.txThread = txThread.TxThread('TX Thread', ser)
-        ser.rxThread = rxThread.RxThread('RX Thread', ser)
+            packet_source=pktGen,
+            read_timeout=1.0,
+            write_timeout=None,
+            inter_char_timeout=None)
         # verify the port exists
         ser_port = os.path.normpath(SERIAL_PORT_DEVICE)
         self.assertTrue(os.path.exists(ser_port))  # Serial unit testing hardware device exists?
+        # create the txThread just for it's threadID when sending msgs on msgQueue
+        ser.txThread = txThread.TxThread(ser, name='TX Thread for {0}'.format(os.path.basename(ser_port)))
         #test the port is opened, configured, and threading variables are configured
         ser.thread_get_startup()
         self.assertTrue(ser.isOpen())
@@ -312,23 +392,28 @@ class TestSerialData(unittest.TestCase):
         self.assertTrue(ser.isOpen())
         ser.close_serial_port()
         self.assertFalse(ser.isOpen())
+        # shut down pktGen
+        pktGen.runLock.acquire()
+        pktGen.running = False
+        pktGen.runLock.release()
+        pktGen.join()
 
     def test_thread_get_data(self):
-        msgQueue = Queue.Queue()
-        pktGen = packetGenerator.PacketGenerator('unitTest', 1, msgQueue, 20, True, 'Seed String')
-        pktGen.makePackets(1)
+        pktGen = packetGenerator.PacketGenerator(max_queue_size=1,
+            num_rand_bytes=2000, printable_chars=True, seed='Seed String',
+            name='PacketGenerator-unittest')
+        pktGen.start()
         ser = serialData.SerialData(
             port=SERIAL_PORT_DEVICE,
-            packetSource=pktGen,
-            msgQueue=msgQueue,
-            readTimeout=1.0,
-            writeTimeout=None,
-            interCharTimeout=None)
-        ser.txThread = txThread.TxThread('TX Thread', ser)
-        ser.rxThread = rxThread.RxThread('RX Thread', ser)
+            packet_source=pktGen,
+            read_timeout=1.0,
+            write_timeout=None,
+            inter_char_timeout=None)
         # verify the port exists
         ser_port = os.path.normpath(SERIAL_PORT_DEVICE)
         self.assertTrue(os.path.exists(ser_port))  # Serial unit testing hardware device exists?
+        # create the txThread just for it's threadID when sending msgs on msgQueue
+        ser.txThread = txThread.TxThread(ser, name='TX Thread for {0}'.format(os.path.basename(ser_port)))
         #test the port is opened, configured, and threading variables are configured
         ser.thread_get_startup()
         self.assertTrue(ser.isOpen())
@@ -336,10 +421,10 @@ class TestSerialData(unittest.TestCase):
             ser.thread_get_start()
         except:
             self.assertTrue(False)
-        # test receiving a packet of data when none is in the queue sent.
+        # test receiving a packet of data when no data was sent.
         ser.flushInput()
         self.assertFalse(ser.get_data())
-        # test sending a packet of data
+        # sending a packet of data
         self.assertTrue(ser.send_data())
         # test receiving a packet of data. (since loopback should be same data as sent)
         self.assertTrue(ser.get_data())
@@ -347,22 +432,28 @@ class TestSerialData(unittest.TestCase):
         self.assertTrue(ser.isOpen())
         ser.close_serial_port()
         self.assertFalse(ser.isOpen())
+        # shut down pktGen
+        pktGen.runLock.acquire()
+        pktGen.running = False
+        pktGen.runLock.release()
+        pktGen.join()
 
     def test_thread_get_stop(self):
-        msgQueue = Queue.Queue()
-        pktGen = packetGenerator.PacketGenerator('unitTest', 1, msgQueue, 20, True, 'Seed String')
+        pktGen = packetGenerator.PacketGenerator(max_queue_size=1,
+            num_rand_bytes=2000, printable_chars=True, seed='Seed String',
+            name='PacketGenerator-unittest')
+        pktGen.start()
         ser = serialData.SerialData(
             port=SERIAL_PORT_DEVICE,
-            packetSource=pktGen,
-            msgQueue=msgQueue,
-            readTimeout=1.0,
-            writeTimeout=None,
-            interCharTimeout=None)
-        ser.txThread = txThread.TxThread('TX Thread', ser)
-        ser.rxThread = rxThread.RxThread('RX Thread', ser)
+            packet_source=pktGen,
+            read_timeout=1.0,
+            write_timeout=None,
+            inter_char_timeout=None)
         # verify the port exists
         ser_port = os.path.normpath(SERIAL_PORT_DEVICE)
         self.assertTrue(os.path.exists(ser_port))  # Serial unit testing hardware device exists?
+        # create the txThread just for it's threadID when sending msgs on msgQueue
+        ser.txThread = txThread.TxThread(ser, name='TX Thread for {0}'.format(os.path.basename(ser_port)))
         #test the port is opened, configured, and threading variables are configured
         self.assertFalse(ser.isOpen())
         ser.thread_get_startup()
@@ -379,11 +470,15 @@ class TestSerialData(unittest.TestCase):
         self.assertTrue(ser.isOpen())
         ser.close_serial_port()
         self.assertFalse(ser.isOpen())
+        # shut down pktGen
+        pktGen.runLock.acquire()
+        pktGen.running = False
+        pktGen.runLock.release()
+        pktGen.join()
 
 
 def runtests():
     unittest.main()
-
 
 if __name__ == '__main__':
     runtests()

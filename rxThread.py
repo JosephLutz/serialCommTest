@@ -5,21 +5,15 @@ import threadMonitor
 from config import *
 
 
-class RxThread(threading.Thread):
+class RxThread(threadMonitor.ThreadMonitor):
     # Thread for running reads from dataGetObj.
     # NOTE:
     #   dataGetObj.threadStartup() is run before event syncRxTxEvent.
     #   Event syncRxTxEvent will be cleared before event threadEvent blocks.
-    def __init__(self, threadName, dataGetObj, threadEvent=None):
-        threading.Thread.__init__(self)
-        self.running = False
-        self.threadName = threadName
-        self.threadID = threadMonitor.getNextThreadID(thread_obj=self)
+    def __init__(self, dataGetObj, threadEvent=None, *args, **kwargs):
+        super(RxThread, self).__init__(*args, **kwargs)
         self.dataGetObj = dataGetObj
         self.dataGetObj.rxThread = self
-        self.runLock = threading.Lock()
-        # Queue for sending state back to messaging thread
-        self.msgQueue = threadMonitor.msgQueue
         # Blocks run until event is set in other thread
         self.threadEvent = threadEvent
         # Used to notify when dataGetObj.threadStartup() is completed
@@ -32,10 +26,8 @@ class RxThread(threading.Thread):
             # notify 'thread created' using msgQueue
             self.msgQueue.put((self.threadID, {'thread_type': 'RX'}, THREAD_CREATED))
 
-    def run(self):
+    def locked_running(self):
         try:
-            self.runLock.acquire()
-            self.running = True
             # thread starting code
             self.dataGetObj.thread_get_startup()
             if ENABLE_SYNC_RX_TX_THREADS:
@@ -68,19 +60,13 @@ class RxThread(threading.Thread):
             self.runLock.release()
             # anything that needs to happen just after the thread loop ends
             self.dataGetObj.thread_get_stop()
+            self.runLock.acquire()
             if self.msgQueue:
                 # notify 'thread stopped' using msgQueue
                 self.msgQueue.put((self.threadID, {'thread_type': 'RX'}, THREAD_STOPPED))
         except:
             if not self.syncRxTxEvent.is_set():
                 self.syncRxTxEvent.set()
-            self.running = False
-            try:
-                # may cause additional error if lock is held
-                # and in particular place in code flow
-                self.runLock.release()
-            except threading.ThreadError:
-                pass
             raise
 
 
