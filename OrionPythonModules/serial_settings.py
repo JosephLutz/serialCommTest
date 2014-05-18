@@ -20,4 +20,4 @@ class SerialSettings(object):
             }]
 
     def apply(self):
-        print 'Serial settings are applied.'
+        pass

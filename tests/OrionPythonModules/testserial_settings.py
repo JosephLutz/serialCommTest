@@ -12,7 +12,7 @@ if __name__ == '__main__':
 from OrionPythonModules import serial_settings
 
 
-class TestMsgMonitor(unittest.TestCase):
+class Testserial_settings(unittest.TestCase):
     def test_object_creation(self):
         settings = serial_settings.SerialSettings()
         self.assertTrue(isinstance(settings, serial_settings.SerialSettings))
