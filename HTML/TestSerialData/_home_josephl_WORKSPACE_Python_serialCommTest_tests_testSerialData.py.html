@@ -1,0 +1,499 @@
+source file: <b>/home/josephl/WORKSPACE/Python/serialCommTest/tests/testSerialData.py</b><br>
+
+
+file stats: <b>288 lines, 0 executed: 0.0% covered</b>
+<pre>
+<font color="black">   1. # serialData_test</font>
+<font color="black">   2. </font>
+<font color="black">   3. # This test requires a USART!</font>
+<font color="black">   4. # This is because it is testing calls that use the serial module</font>
+<font color="black">   5. # Edit the SERIAL_PORT_DEVICE variable below to match a USART.</font>
+<font color="black">   6. # The USART needs to be in loopback mode.</font>
+<font color="black">   7. #</font>
+<font color="black">   8. # loopback mode:</font>
+<font color="black">   9. #   RX, and TX connected</font>
+<font color="black">  10. #   RTS, and CTS connected</font>
+<font color="black">  11. #   DTR, DCD and DSR connected</font>
+<font color="black">  12. </font>
+<font color="red">  13. SERIAL_PORT_DEVICE = '/dev/ttyUSB0'</font>
+<font color="black">  14. #SERIAL_PORT_DEVICE = '/dev/serial/by-path/platform-musb-hdrc.0.auto-usb-0:1.1:1.0',</font>
+<font color="black">  15. </font>
+<font color="red">  16. import traceback</font>
+<font color="red">  17. import threading</font>
+<font color="red">  18. import unittest</font>
+<font color="red">  19. import Queue</font>
+<font color="red">  20. import time</font>
+<font color="red">  21. import sys</font>
+<font color="red">  22. import os</font>
+<font color="black">  23. </font>
+<font color="red">  24. if __name__ == '__main__':</font>
+<font color="red">  25. 	importDirectory = os.getcwd()</font>
+<font color="red">  26. 	if os.path.basename(importDirectory) in ['tests']:</font>
+<font color="red">  27. 		importDirectory = os.path.dirname(importDirectory)</font>
+<font color="red">  28. 	sys.path = [importDirectory] + sys.path</font>
+<font color="black">  29. </font>
+<font color="black">  30. # Module to test</font>
+<font color="red">  31. import serialData</font>
+<font color="black">  32. # Other modules</font>
+<font color="red">  33. import packetGenerator</font>
+<font color="red">  34. import txThread</font>
+<font color="red">  35. import threadMonitor</font>
+<font color="red">  36. from config import *</font>
+<font color="black">  37. </font>
+<font color="black">  38. </font>
+<font color="red">  39. def get_exception_info():</font>
+<font color="black">  40. 	&quot;&quot;&quot;</font>
+<font color="black">  41. 	Gathers information about a caught exception.</font>
+<font color="black">  42. 	This is used when I cause other exceptions in an except clause</font>
+<font color="black">  43. </font>
+<font color="black">  44. 	:rtype : string</font>
+<font color="black">  45. 	&quot;&quot;&quot;</font>
+<font color="red">  46. 	exc_type, exc_obj, exc_tb = sys.exc_info()</font>
+<font color="red">  47. 	fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]</font>
+<font color="red">  48. 	if exc_type is None or exc_obj is None or exc_tb is None:</font>
+<font color="red">  49. 		return 'No Exception Encountered'</font>
+<font color="red">  50. 	error_out = 'Exception Encountered'</font>
+<font color="red">  51. 	error_out += '{0}\n'.format('=' * 80)</font>
+<font color="red">  52. 	error_out += 'lineno:{lineno}, fname:{fname}'.format(fname=fname, lineno=exc_tb.tb_lineno)</font>
+<font color="red">  53. 	for line in traceback.format_tb(exc_tb):</font>
+<font color="red">  54. 		error_out += '{0}\n'.format(line)</font>
+<font color="red">  55. 	return '\n{line:80}\n{out}\n{line:80}'.format(line='#' * 80, out=error_out)</font>
+<font color="black">  56. </font>
+<font color="black">  57. </font>
+<font color="red">  58. class TestSerialData(unittest.TestCase):</font>
+<font color="red">  59. 	def setUp(self):</font>
+<font color="red">  60. 		packetGenerator.PacketGenerator.allocated_lock.acquire()</font>
+<font color="red">  61. 		packetGenerator.PacketGenerator.allocated = set()</font>
+<font color="red">  62. 		packetGenerator.PacketGenerator.ALLOCATABLE_PACKET_ID = set(xrange(MAX_PACKET_ID))</font>
+<font color="red">  63. 		packetGenerator.PacketGenerator.allocated_lock.release()</font>
+<font color="red">  64. 		packetGenerator.PacketGenerator.allocated_lock = threading.Lock()</font>
+<font color="red">  65. 		threadMonitor.ThreadMonitor.threadMapLock.acquire()</font>
+<font color="red">  66. 		threadMonitor.ThreadMonitor.threadMap = {}</font>
+<font color="red">  67. 		threadMonitor.ThreadMonitor.threadMapLock.release()</font>
+<font color="red">  68. 		threadMonitor.ThreadMonitor.threadMapLock = threading.Lock()</font>
+<font color="red">  69. 		threadMonitor.ThreadMonitor.msg_queue = Queue.Queue()</font>
+<font color="black">  70. </font>
+<font color="red">  71. 	def test_serial_device_exists(self):</font>
+<font color="red">  72. 		ser_port = os.path.normpath(SERIAL_PORT_DEVICE)</font>
+<font color="red">  73. 		self.assertTrue(os.path.exists(ser_port))  # Serial unit testing hardware device exists?</font>
+<font color="black">  74. </font>
+<font color="red">  75. 	def test_object_creation(self):</font>
+<font color="red">  76. 		pkt_gen = packetGenerator.PacketGenerator(</font>
+<font color="black">  77. 			max_queue_size=1, num_rand_bytes=2000, printable_chars=True, seed='Seed String',</font>
+<font color="black">  78. 			name='PacketGenerator-unittest')</font>
+<font color="black">  79. 		# test the msg_queue gets a message (a message is a tuple of three items)</font>
+<font color="red">  80. 		msg = threadMonitor.ThreadMonitor.msg_queue.get()</font>
+<font color="red">  81. 		self.assertTrue(isinstance(msg, tuple) and len(msg) is 3)</font>
+<font color="black">  82. 		# test simple object creation</font>
+<font color="red">  83. 		self.assertTrue(</font>
+<font color="black">  84. 			isinstance(</font>
+<font color="black">  85. 				serialData.SerialData(port=SERIAL_PORT_DEVICE, packet_source=pkt_gen),</font>
+<font color="black">  86. 				serialData.SerialData))</font>
+<font color="black">  87. 		# test that the object is created with all arguments</font>
+<font color="red">  88. 		ser = serialData.SerialData(</font>
+<font color="black">  89. 			port=SERIAL_PORT_DEVICE,</font>
+<font color="black">  90. 			packet_source=pkt_gen,</font>
+<font color="black">  91. 			read_timeout=1.0,</font>
+<font color="black">  92. 			write_timeout=None,</font>
+<font color="black">  93. 			inter_char_timeout=None)</font>
+<font color="red">  94. 		self.assertTrue(isinstance(ser, serialData.SerialData))</font>
+<font color="black">  95. 		# test the msg_queue gets a message (a message is a tuple of three items)</font>
+<font color="red">  96. 		msg = threadMonitor.ThreadMonitor.msg_queue.get()</font>
+<font color="red">  97. 		self.assertTrue(isinstance(msg, tuple) and len(msg) is 3)</font>
+<font color="black">  98. </font>
+<font color="red">  99. 	def test_set_serial_mode(self):</font>
+<font color="red"> 100. 		pkt_gen = packetGenerator.PacketGenerator(</font>
+<font color="black"> 101. 			max_queue_size=1, num_rand_bytes=2000, printable_chars=True, seed='Seed String',</font>
+<font color="black"> 102. 			name='PacketGenerator-unittest')</font>
+<font color="red"> 103. 		pkt_gen.start()</font>
+<font color="red"> 104. 		ser = serialData.SerialData(</font>
+<font color="black"> 105. 			port=SERIAL_PORT_DEVICE,</font>
+<font color="black"> 106. 			packet_source=pkt_gen,</font>
+<font color="black"> 107. 			read_timeout=1.0,</font>
+<font color="black"> 108. 			write_timeout=None,</font>
+<font color="black"> 109. 			inter_char_timeout=None)</font>
+<font color="black"> 110. 		# test setting the serial mode for all ports to the same thing using 'RS232'</font>
+<font color="red"> 111. 		ser.set_serial_mode('RS232')</font>
+<font color="black"> 112. 		# test setting the serial mode for all ports to the same thing using 'RS-485 2-wire'</font>
+<font color="red"> 113. 		ser.set_serial_mode('RS-485 2-wire')</font>
+<font color="black"> 114. 		# test setting the serial mode for all ports to the same thing using 0</font>
+<font color="red"> 115. 		ser.set_serial_mode(0)</font>
+<font color="black"> 116. 		# test setting the serial mode for all ports to the same thing using u'RS232'</font>
+<font color="red"> 117. 		ser.set_serial_mode(u'RS232')</font>
+<font color="black"> 118. 		# test setting the serial mode for all ports using [0,0,0,0, 0,0,0,0]</font>
+<font color="red"> 119. 		ser.set_serial_mode([0, 0, 0, 0, 0, 0, 0, 0])</font>
+<font color="black"> 120. 		# test setting the serial mode for all ports using [0,0,0,0,] - set all to loopback, though not verifiable</font>
+<font color="red"> 121. 		ser.set_serial_mode([0, 0, 0, 0, ])</font>
+<font color="red"> 122. 		self.assertTrue(True)</font>
+<font color="black"> 123. 		# shut down pkt_gen</font>
+<font color="red"> 124. 		pkt_gen.running_lock.acquire()</font>
+<font color="red"> 125. 		pkt_gen.running = False</font>
+<font color="red"> 126. 		pkt_gen.running_lock.release()</font>
+<font color="red"> 127. 		pkt_gen.join()</font>
+<font color="black"> 128. </font>
+<font color="red"> 129. 	def test_open_port(self):</font>
+<font color="red"> 130. 		pkt_gen = packetGenerator.PacketGenerator(</font>
+<font color="black"> 131. 			max_queue_size=1, num_rand_bytes=2000, printable_chars=True, seed='Seed String',</font>
+<font color="black"> 132. 			name='PacketGenerator-unittest')</font>
+<font color="red"> 133. 		pkt_gen.start()</font>
+<font color="red"> 134. 		ser = serialData.SerialData(</font>
+<font color="black"> 135. 			port=SERIAL_PORT_DEVICE,</font>
+<font color="black"> 136. 			packet_source=pkt_gen,</font>
+<font color="black"> 137. 			read_timeout=1.0,</font>
+<font color="black"> 138. 			write_timeout=None,</font>
+<font color="black"> 139. 			inter_char_timeout=None)</font>
+<font color="black"> 140. 		# verify the port exists</font>
+<font color="red"> 141. 		ser_port = os.path.normpath(SERIAL_PORT_DEVICE)</font>
+<font color="red"> 142. 		self.assertTrue(os.path.exists(ser_port))  # Serial unit testing hardware device exists?</font>
+<font color="black"> 143. 		# create the tx_thread just for it's thread_id when sending msgs on msg_queue</font>
+<font color="red"> 144. 		ser.tx_thread = txThread.TxThread(ser, name='TX Thread for {0}'.format(os.path.basename(ser_port)))</font>
+<font color="black"> 145. 		#test the port is opened and configured</font>
+<font color="red"> 146. 		ser.open_serial_port()</font>
+<font color="red"> 147. 		self.assertTrue(ser.isOpen())</font>
+<font color="black"> 148. 		# Close the port</font>
+<font color="red"> 149. 		ser.close_serial_port()</font>
+<font color="red"> 150. 		self.assertFalse(ser.isOpen())</font>
+<font color="black"> 151. 		# shut down pkt_gen</font>
+<font color="red"> 152. 		pkt_gen.running_lock.acquire()</font>
+<font color="red"> 153. 		pkt_gen.running = False</font>
+<font color="red"> 154. 		pkt_gen.running_lock.release()</font>
+<font color="red"> 155. 		pkt_gen.join()</font>
+<font color="black"> 156. </font>
+<font color="red"> 157. 	def test_close_port(self):</font>
+<font color="red"> 158. 		pkt_gen = packetGenerator.PacketGenerator(</font>
+<font color="black"> 159. 			max_queue_size=1, num_rand_bytes=2000, printable_chars=True, seed='Seed String',</font>
+<font color="black"> 160. 			name='PacketGenerator-unittest')</font>
+<font color="red"> 161. 		pkt_gen.start()</font>
+<font color="red"> 162. 		ser = serialData.SerialData(</font>
+<font color="black"> 163. 			port=SERIAL_PORT_DEVICE,</font>
+<font color="black"> 164. 			packet_source=pkt_gen,</font>
+<font color="black"> 165. 			read_timeout=1.0,</font>
+<font color="black"> 166. 			write_timeout=None,</font>
+<font color="black"> 167. 			inter_char_timeout=None)</font>
+<font color="black"> 168. 		# verify the port exists</font>
+<font color="red"> 169. 		ser_port = os.path.normpath(SERIAL_PORT_DEVICE)</font>
+<font color="red"> 170. 		self.assertTrue(os.path.exists(ser_port))  # Serial unit testing hardware device exists?</font>
+<font color="black"> 171. 		# create the tx_thread just for it's thread_id when sending msgs on msg_queue</font>
+<font color="red"> 172. 		ser.tx_thread = txThread.TxThread(ser, name='TX Thread for {0}'.format(os.path.basename(ser_port)))</font>
+<font color="black"> 173. 		#test the port is opened and configured</font>
+<font color="red"> 174. 		ser.open_serial_port()</font>
+<font color="red"> 175. 		self.assertTrue(ser.isOpen())</font>
+<font color="black"> 176. 		# Close the port</font>
+<font color="red"> 177. 		ser.close_serial_port()</font>
+<font color="red"> 178. 		self.assertFalse(ser.isOpen())</font>
+<font color="black"> 179. 		# shut down pkt_gen</font>
+<font color="red"> 180. 		pkt_gen.running_lock.acquire()</font>
+<font color="red"> 181. 		pkt_gen.running = False</font>
+<font color="red"> 182. 		pkt_gen.running_lock.release()</font>
+<font color="red"> 183. 		pkt_gen.join()</font>
+<font color="black"> 184. </font>
+<font color="red"> 185. 	def test_thread_send_startup(self):</font>
+<font color="red"> 186. 		pkt_gen = packetGenerator.PacketGenerator(</font>
+<font color="black"> 187. 			max_queue_size=1, num_rand_bytes=2000, printable_chars=True, seed='Seed String',</font>
+<font color="black"> 188. 			name='PacketGenerator-unittest')</font>
+<font color="red"> 189. 		pkt_gen.start()</font>
+<font color="red"> 190. 		ser = serialData.SerialData(</font>
+<font color="black"> 191. 			port=SERIAL_PORT_DEVICE,</font>
+<font color="black"> 192. 			packet_source=pkt_gen,</font>
+<font color="black"> 193. 			read_timeout=1.0,</font>
+<font color="black"> 194. 			write_timeout=None,</font>
+<font color="black"> 195. 			inter_char_timeout=None)</font>
+<font color="black"> 196. 		# verify the port exists</font>
+<font color="red"> 197. 		ser_port = os.path.normpath(SERIAL_PORT_DEVICE)</font>
+<font color="red"> 198. 		self.assertTrue(os.path.exists(ser_port))  # Serial unit testing hardware device exists?</font>
+<font color="black"> 199. 		# create the tx_thread just for it's thread_id when sending msgs on msg_queue</font>
+<font color="red"> 200. 		ser.tx_thread = txThread.TxThread(ser, name='TX Thread for {0}'.format(os.path.basename(ser_port)))</font>
+<font color="black"> 201. 		#test the port is opened, configured, and threading variables are configured</font>
+<font color="red"> 202. 		self.assertFalse(ser.isOpen())</font>
+<font color="red"> 203. 		ser.thread_send_startup()</font>
+<font color="red"> 204. 		self.assertTrue(ser.isOpen())</font>
+<font color="black"> 205. 		# Close the port</font>
+<font color="red"> 206. 		ser.close_serial_port()</font>
+<font color="red"> 207. 		self.assertFalse(ser.isOpen())</font>
+<font color="black"> 208. 		# shut down pkt_gen</font>
+<font color="red"> 209. 		pkt_gen.running_lock.acquire()</font>
+<font color="red"> 210. 		pkt_gen.running = False</font>
+<font color="red"> 211. 		pkt_gen.running_lock.release()</font>
+<font color="red"> 212. 		pkt_gen.join()</font>
+<font color="black"> 213. </font>
+<font color="red"> 214. 	def test_thread_send_start(self):</font>
+<font color="red"> 215. 		pkt_gen = packetGenerator.PacketGenerator(</font>
+<font color="black"> 216. 			max_queue_size=1, num_rand_bytes=2000, printable_chars=True, seed='Seed String',</font>
+<font color="black"> 217. 			name='PacketGenerator-unittest')</font>
+<font color="red"> 218. 		pkt_gen.start()</font>
+<font color="red"> 219. 		ser = serialData.SerialData(</font>
+<font color="black"> 220. 			port=SERIAL_PORT_DEVICE,</font>
+<font color="black"> 221. 			packet_source=pkt_gen,</font>
+<font color="black"> 222. 			read_timeout=1.0,</font>
+<font color="black"> 223. 			write_timeout=None,</font>
+<font color="black"> 224. 			inter_char_timeout=None)</font>
+<font color="black"> 225. 		# verify the port exists</font>
+<font color="red"> 226. 		ser_port = os.path.normpath(SERIAL_PORT_DEVICE)</font>
+<font color="red"> 227. 		self.assertTrue(os.path.exists(ser_port))  # Serial unit testing hardware device exists?</font>
+<font color="black"> 228. 		# create the tx_thread just for it's thread_id when sending msgs on msg_queue</font>
+<font color="red"> 229. 		ser.tx_thread = txThread.TxThread(ser, name='TX Thread for {0}'.format(os.path.basename(ser_port)))</font>
+<font color="black"> 230. 		#test the port is opened, configured, and threading variables are configured</font>
+<font color="red"> 231. 		self.assertFalse(ser.isOpen())</font>
+<font color="red"> 232. 		ser.thread_send_startup()</font>
+<font color="red"> 233. 		self.assertTrue(ser.isOpen())</font>
+<font color="red"> 234. 		self.assertTrue(ser.packet_tuple is None)</font>
+<font color="red"> 235. 		try:</font>
+<font color="red"> 236. 			self.assertTrue(ser.thread_send_start())</font>
+<font color="red"> 237. 		except BaseException:</font>
+<font color="red"> 238. 			self.assertTrue(False)</font>
+<font color="red"> 239. 		self.assertFalse(ser.packet_tuple is None)</font>
+<font color="black"> 240. 		# Close the port</font>
+<font color="red"> 241. 		self.assertTrue(ser.isOpen())</font>
+<font color="red"> 242. 		ser.close_serial_port()</font>
+<font color="red"> 243. 		self.assertFalse(ser.isOpen())</font>
+<font color="black"> 244. 		# shut down pkt_gen</font>
+<font color="red"> 245. 		pkt_gen.running_lock.acquire()</font>
+<font color="red"> 246. 		pkt_gen.running = False</font>
+<font color="red"> 247. 		pkt_gen.running_lock.release()</font>
+<font color="red"> 248. 		pkt_gen.join()</font>
+<font color="black"> 249. </font>
+<font color="red"> 250. 	def test_thread_send_data(self):</font>
+<font color="red"> 251. 		pkt_gen = packetGenerator.PacketGenerator(</font>
+<font color="black"> 252. 			max_queue_size=1, num_rand_bytes=2000, printable_chars=True, seed='Seed String',</font>
+<font color="black"> 253. 			name='PacketGenerator-unittest')</font>
+<font color="red"> 254. 		pkt_gen.start()</font>
+<font color="red"> 255. 		ser = serialData.SerialData(</font>
+<font color="black"> 256. 			port=SERIAL_PORT_DEVICE,</font>
+<font color="black"> 257. 			packet_source=pkt_gen,</font>
+<font color="black"> 258. 			read_timeout=1.0,</font>
+<font color="black"> 259. 			write_timeout=None,</font>
+<font color="black"> 260. 			inter_char_timeout=None)</font>
+<font color="black"> 261. 		# verify the port exists</font>
+<font color="red"> 262. 		ser_port = os.path.normpath(SERIAL_PORT_DEVICE)</font>
+<font color="red"> 263. 		self.assertTrue(os.path.exists(ser_port))  # Serial unit testing hardware device exists?</font>
+<font color="black"> 264. 		# create the tx_thread just for it's thread_id when sending msgs on msg_queue</font>
+<font color="red"> 265. 		ser.tx_thread = txThread.TxThread(ser, name='TX Thread for {0}'.format(os.path.basename(ser_port)))</font>
+<font color="black"> 266. 		#test the port is opened, configured, and threading variables are configured</font>
+<font color="red"> 267. 		self.assertFalse(ser.isOpen())</font>
+<font color="red"> 268. 		ser.thread_send_startup()</font>
+<font color="red"> 269. 		self.assertTrue(ser.isOpen())</font>
+<font color="red"> 270. 		try:</font>
+<font color="black"> 271. 			# block pkt_gen from creating any more packets</font>
+<font color="red"> 272. 			pkt_gen.running_lock.acquire()</font>
+<font color="black"> 273. 			# give the pkt_gen thread time to block on the running_lock</font>
+<font color="red"> 274. 			time.sleep(0.1 + PACKET_GENERATOR_TIMEOUT)</font>
+<font color="red"> 275. 			self.assertTrue(ser.packet_tuple is None)</font>
+<font color="red"> 276. 			self.assertFalse(pkt_gen.queue.empty())</font>
+<font color="red"> 277. 			try:</font>
+<font color="red"> 278. 				self.assertTrue(ser.thread_send_start())</font>
+<font color="red"> 279. 			except BaseException:</font>
+<font color="red"> 280. 				self.assertTrue(False)</font>
+<font color="red"> 281. 			self.assertFalse(ser.packet_tuple is None)</font>
+<font color="red"> 282. 			self.assertTrue(pkt_gen.queue.empty())</font>
+<font color="black"> 283. 			# test sending a packet of data</font>
+<font color="red"> 284. 			self.assertTrue(ser.send_data())</font>
+<font color="black"> 285. 			# test sending a packet of data when no data exists in queue</font>
+<font color="red"> 286. 			self.assertTrue(ser.packet_tuple is None)</font>
+<font color="black"> 287. 			#self.assertTrue(pkt_gen.queue.empty())</font>
+<font color="red"> 288. 			self.assertFalse(ser.send_data())</font>
+<font color="black"> 289. 			# release pkt_gen</font>
+<font color="red"> 290. 			pkt_gen.running_lock.release()</font>
+<font color="red"> 291. 		except BaseException:</font>
+<font color="red"> 292. 			pkt_gen.running_lock.release()</font>
+<font color="red"> 293. 			raise</font>
+<font color="black"> 294. 		# Close the port</font>
+<font color="red"> 295. 		self.assertTrue(ser.isOpen())</font>
+<font color="red"> 296. 		ser.close_serial_port()</font>
+<font color="red"> 297. 		self.assertFalse(ser.isOpen())</font>
+<font color="black"> 298. 		# shut down pkt_gen</font>
+<font color="red"> 299. 		pkt_gen.running_lock.acquire()</font>
+<font color="red"> 300. 		pkt_gen.running = False</font>
+<font color="red"> 301. 		pkt_gen.running_lock.release()</font>
+<font color="red"> 302. 		pkt_gen.join()</font>
+<font color="black"> 303. </font>
+<font color="red"> 304. 	def test_thread_send_stop(self):</font>
+<font color="red"> 305. 		pkt_gen = packetGenerator.PacketGenerator(</font>
+<font color="black"> 306. 			max_queue_size=1, num_rand_bytes=2000, printable_chars=True, seed='Seed String',</font>
+<font color="black"> 307. 			name='PacketGenerator-unittest')</font>
+<font color="red"> 308. 		pkt_gen.start()</font>
+<font color="red"> 309. 		ser = serialData.SerialData(</font>
+<font color="black"> 310. 			port=SERIAL_PORT_DEVICE,</font>
+<font color="black"> 311. 			packet_source=pkt_gen,</font>
+<font color="black"> 312. 			read_timeout=1.0,</font>
+<font color="black"> 313. 			write_timeout=None,</font>
+<font color="black"> 314. 			inter_char_timeout=None)</font>
+<font color="black"> 315. 		# verify the port exists</font>
+<font color="red"> 316. 		ser_port = os.path.normpath(SERIAL_PORT_DEVICE)</font>
+<font color="red"> 317. 		self.assertTrue(os.path.exists(ser_port))  # Serial unit testing hardware device exists?</font>
+<font color="black"> 318. 		# create the tx_thread just for it's thread_id when sending msgs on msg_queue</font>
+<font color="red"> 319. 		ser.tx_thread = txThread.TxThread(ser, name='TX Thread for {0}'.format(os.path.basename(ser_port)))</font>
+<font color="black"> 320. 		#test the port is opened, configured, and threading variables are configured</font>
+<font color="red"> 321. 		self.assertFalse(ser.isOpen())</font>
+<font color="red"> 322. 		ser.thread_send_startup()</font>
+<font color="red"> 323. 		self.assertTrue(ser.isOpen())</font>
+<font color="red"> 324. 		self.assertTrue(ser.packet_tuple is None)</font>
+<font color="red"> 325. 		try:</font>
+<font color="red"> 326. 			self.assertTrue(ser.thread_send_start())</font>
+<font color="red"> 327. 		except BaseException:</font>
+<font color="red"> 328. 			self.assertTrue(False)</font>
+<font color="red"> 329. 		self.assertFalse(ser.packet_tuple is None)</font>
+<font color="red"> 330. 		try:</font>
+<font color="red"> 331. 			ser.thread_send_stop()</font>
+<font color="red"> 332. 		except BaseException:</font>
+<font color="red"> 333. 			self.assertTrue(False)</font>
+<font color="black"> 334. 		# Close the port</font>
+<font color="red"> 335. 		self.assertTrue(ser.isOpen())</font>
+<font color="red"> 336. 		ser.close_serial_port()</font>
+<font color="red"> 337. 		self.assertFalse(ser.isOpen())</font>
+<font color="black"> 338. 		# shut down pkt_gen</font>
+<font color="red"> 339. 		pkt_gen.running_lock.acquire()</font>
+<font color="red"> 340. 		pkt_gen.running = False</font>
+<font color="red"> 341. 		pkt_gen.running_lock.release()</font>
+<font color="red"> 342. 		pkt_gen.join()</font>
+<font color="black"> 343. </font>
+<font color="red"> 344. 	def test_thread_get_startup(self):</font>
+<font color="red"> 345. 		pkt_gen = packetGenerator.PacketGenerator(</font>
+<font color="black"> 346. 			max_queue_size=1, num_rand_bytes=2000, printable_chars=True, seed='Seed String',</font>
+<font color="black"> 347. 			name='PacketGenerator-unittest')</font>
+<font color="red"> 348. 		pkt_gen.start()</font>
+<font color="red"> 349. 		ser = serialData.SerialData(</font>
+<font color="black"> 350. 			port=SERIAL_PORT_DEVICE,</font>
+<font color="black"> 351. 			packet_source=pkt_gen,</font>
+<font color="black"> 352. 			read_timeout=1.0,</font>
+<font color="black"> 353. 			write_timeout=None,</font>
+<font color="black"> 354. 			inter_char_timeout=None)</font>
+<font color="black"> 355. 		# verify the port exists</font>
+<font color="red"> 356. 		ser_port = os.path.normpath(SERIAL_PORT_DEVICE)</font>
+<font color="red"> 357. 		self.assertTrue(os.path.exists(ser_port))  # Serial unit testing hardware device exists?</font>
+<font color="black"> 358. 		# create the tx_thread just for it's thread_id when sending msgs on msg_queue</font>
+<font color="red"> 359. 		ser.tx_thread = txThread.TxThread(ser, name='TX Thread for {0}'.format(os.path.basename(ser_port)))</font>
+<font color="black"> 360. 		#test the port is opened, configured, and threading variables are configured</font>
+<font color="red"> 361. 		self.assertFalse(ser.isOpen())</font>
+<font color="red"> 362. 		ser.thread_get_startup()</font>
+<font color="red"> 363. 		self.assertTrue(ser.isOpen())</font>
+<font color="black"> 364. 		# Close the port</font>
+<font color="red"> 365. 		ser.close_serial_port()</font>
+<font color="red"> 366. 		self.assertFalse(ser.isOpen())</font>
+<font color="black"> 367. 		# shut down pkt_gen</font>
+<font color="red"> 368. 		pkt_gen.running_lock.acquire()</font>
+<font color="red"> 369. 		pkt_gen.running = False</font>
+<font color="red"> 370. 		pkt_gen.running_lock.release()</font>
+<font color="red"> 371. 		pkt_gen.join()</font>
+<font color="black"> 372. </font>
+<font color="red"> 373. 	def test_thread_get_start(self):</font>
+<font color="red"> 374. 		pkt_gen = packetGenerator.PacketGenerator(</font>
+<font color="black"> 375. 			max_queue_size=1, num_rand_bytes=2000, printable_chars=True, seed='Seed String',</font>
+<font color="black"> 376. 			name='PacketGenerator-unittest')</font>
+<font color="red"> 377. 		pkt_gen.start()</font>
+<font color="red"> 378. 		ser = serialData.SerialData(</font>
+<font color="black"> 379. 			port=SERIAL_PORT_DEVICE,</font>
+<font color="black"> 380. 			packet_source=pkt_gen,</font>
+<font color="black"> 381. 			read_timeout=1.0,</font>
+<font color="black"> 382. 			write_timeout=None,</font>
+<font color="black"> 383. 			inter_char_timeout=None)</font>
+<font color="black"> 384. 		# verify the port exists</font>
+<font color="red"> 385. 		ser_port = os.path.normpath(SERIAL_PORT_DEVICE)</font>
+<font color="red"> 386. 		self.assertTrue(os.path.exists(ser_port))  # Serial unit testing hardware device exists?</font>
+<font color="black"> 387. 		# create the tx_thread just for it's thread_id when sending msgs on msg_queue</font>
+<font color="red"> 388. 		ser.tx_thread = txThread.TxThread(ser, name='TX Thread for {0}'.format(os.path.basename(ser_port)))</font>
+<font color="black"> 389. 		#test the port is opened, configured, and threading variables are configured</font>
+<font color="red"> 390. 		ser.thread_get_startup()</font>
+<font color="red"> 391. 		self.assertTrue(ser.isOpen())</font>
+<font color="red"> 392. 		try:</font>
+<font color="red"> 393. 			ser.thread_get_start()</font>
+<font color="red"> 394. 		except BaseException:</font>
+<font color="red"> 395. 			self.assertTrue(False)</font>
+<font color="black"> 396. 		# Close the port</font>
+<font color="red"> 397. 		self.assertTrue(ser.isOpen())</font>
+<font color="red"> 398. 		ser.close_serial_port()</font>
+<font color="red"> 399. 		self.assertFalse(ser.isOpen())</font>
+<font color="black"> 400. 		# shut down pkt_gen</font>
+<font color="red"> 401. 		pkt_gen.running_lock.acquire()</font>
+<font color="red"> 402. 		pkt_gen.running = False</font>
+<font color="red"> 403. 		pkt_gen.running_lock.release()</font>
+<font color="red"> 404. 		pkt_gen.join()</font>
+<font color="black"> 405. </font>
+<font color="red"> 406. 	def test_thread_get_data(self):</font>
+<font color="red"> 407. 		pkt_gen = packetGenerator.PacketGenerator(</font>
+<font color="black"> 408. 			max_queue_size=1, num_rand_bytes=2000, printable_chars=True, seed='Seed String',</font>
+<font color="black"> 409. 			name='PacketGenerator-unittest')</font>
+<font color="red"> 410. 		pkt_gen.start()</font>
+<font color="red"> 411. 		ser = serialData.SerialData(</font>
+<font color="black"> 412. 			port=SERIAL_PORT_DEVICE,</font>
+<font color="black"> 413. 			packet_source=pkt_gen,</font>
+<font color="black"> 414. 			read_timeout=1.0,</font>
+<font color="black"> 415. 			write_timeout=None,</font>
+<font color="black"> 416. 			inter_char_timeout=None)</font>
+<font color="black"> 417. 		# verify the port exists</font>
+<font color="red"> 418. 		ser_port = os.path.normpath(SERIAL_PORT_DEVICE)</font>
+<font color="red"> 419. 		self.assertTrue(os.path.exists(ser_port))  # Serial unit testing hardware device exists?</font>
+<font color="black"> 420. 		# create the tx_thread just for it's thread_id when sending msgs on msg_queue</font>
+<font color="red"> 421. 		ser.tx_thread = txThread.TxThread(ser, name='TX Thread for {0}'.format(os.path.basename(ser_port)))</font>
+<font color="black"> 422. 		#test the port is opened, configured, and threading variables are configured</font>
+<font color="red"> 423. 		ser.thread_get_startup()</font>
+<font color="red"> 424. 		self.assertTrue(ser.isOpen())</font>
+<font color="red"> 425. 		try:</font>
+<font color="red"> 426. 			ser.thread_get_start()</font>
+<font color="red"> 427. 		except BaseException:</font>
+<font color="red"> 428. 			self.assertTrue(False)</font>
+<font color="black"> 429. 		# test receiving a packet of data when no data was sent.</font>
+<font color="red"> 430. 		ser.flushInput()</font>
+<font color="red"> 431. 		self.assertFalse(ser.get_data())</font>
+<font color="black"> 432. 		# sending a packet of data</font>
+<font color="red"> 433. 		self.assertTrue(ser.send_data())</font>
+<font color="black"> 434. 		# test receiving a packet of data. (since loopback should be same data as sent)</font>
+<font color="red"> 435. 		self.assertTrue(ser.get_data())</font>
+<font color="black"> 436. 		# Close the port</font>
+<font color="red"> 437. 		self.assertTrue(ser.isOpen())</font>
+<font color="red"> 438. 		ser.close_serial_port()</font>
+<font color="red"> 439. 		self.assertFalse(ser.isOpen())</font>
+<font color="black"> 440. 		# shut down pkt_gen</font>
+<font color="red"> 441. 		pkt_gen.running_lock.acquire()</font>
+<font color="red"> 442. 		pkt_gen.running = False</font>
+<font color="red"> 443. 		pkt_gen.running_lock.release()</font>
+<font color="red"> 444. 		pkt_gen.join()</font>
+<font color="black"> 445. </font>
+<font color="red"> 446. 	def test_thread_get_stop(self):</font>
+<font color="red"> 447. 		pkt_gen = packetGenerator.PacketGenerator(</font>
+<font color="black"> 448. 			max_queue_size=1, num_rand_bytes=2000, printable_chars=True, seed='Seed String',</font>
+<font color="black"> 449. 			name='PacketGenerator-unittest')</font>
+<font color="red"> 450. 		pkt_gen.start()</font>
+<font color="red"> 451. 		ser = serialData.SerialData(</font>
+<font color="black"> 452. 			port=SERIAL_PORT_DEVICE,</font>
+<font color="black"> 453. 			packet_source=pkt_gen,</font>
+<font color="black"> 454. 			read_timeout=1.0,</font>
+<font color="black"> 455. 			write_timeout=None,</font>
+<font color="black"> 456. 			inter_char_timeout=None)</font>
+<font color="black"> 457. 		# verify the port exists</font>
+<font color="red"> 458. 		ser_port = os.path.normpath(SERIAL_PORT_DEVICE)</font>
+<font color="red"> 459. 		self.assertTrue(os.path.exists(ser_port))  # Serial unit testing hardware device exists?</font>
+<font color="black"> 460. 		# create the tx_thread just for it's thread_id when sending msgs on msg_queue</font>
+<font color="red"> 461. 		ser.tx_thread = txThread.TxThread(ser, name='TX Thread for {0}'.format(os.path.basename(ser_port)))</font>
+<font color="black"> 462. 		#test the port is opened, configured, and threading variables are configured</font>
+<font color="red"> 463. 		self.assertFalse(ser.isOpen())</font>
+<font color="red"> 464. 		ser.thread_get_startup()</font>
+<font color="red"> 465. 		self.assertTrue(ser.isOpen())</font>
+<font color="red"> 466. 		try:</font>
+<font color="red"> 467. 			ser.thread_get_start()</font>
+<font color="red"> 468. 		except BaseException:</font>
+<font color="red"> 469. 			self.assertTrue(False)</font>
+<font color="red"> 470. 		try:</font>
+<font color="red"> 471. 			ser.thread_get_stop()</font>
+<font color="red"> 472. 		except BaseException:</font>
+<font color="red"> 473. 			self.assertTrue(False)</font>
+<font color="black"> 474. 		# Close the port</font>
+<font color="red"> 475. 		self.assertTrue(ser.isOpen())</font>
+<font color="red"> 476. 		ser.close_serial_port()</font>
+<font color="red"> 477. 		self.assertFalse(ser.isOpen())</font>
+<font color="black"> 478. 		# shut down pkt_gen</font>
+<font color="red"> 479. 		pkt_gen.running_lock.acquire()</font>
+<font color="red"> 480. 		pkt_gen.running = False</font>
+<font color="red"> 481. 		pkt_gen.running_lock.release()</font>
+<font color="red"> 482. 		pkt_gen.join()</font>
+<font color="black"> 483. </font>
+<font color="black"> 484. </font>
+<font color="red"> 485. def runtests():</font>
+<font color="red"> 486. 	unittest.main()</font>
+<font color="black"> 487. </font>
+<font color="black"> 488. </font>
+<font color="red"> 489. if __name__ == '__main__':</font>
+<font color="red"> 490. 	runtests()</font>
+<font color="black"> 491. #suite = unittest.TestLoader().loadTestsFromTestCase(TestSerialData)</font>
+<font color="black"> 492. #unittest.TextTestRunner(verbosity=2).run(suite)</font>
+</pre>
+

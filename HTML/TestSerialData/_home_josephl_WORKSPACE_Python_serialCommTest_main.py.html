@@ -1,0 +1,193 @@
+source file: <b>/home/josephl/WORKSPACE/Python/serialCommTest/main.py</b><br>
+
+
+file stats: <b>118 lines, 0 executed: 0.0% covered</b>
+<pre>
+<font color="red">   1. import threading</font>
+<font color="red">   2. import traceback</font>
+<font color="red">   3. import Queue</font>
+<font color="red">   4. import time</font>
+<font color="black">   5. </font>
+<font color="red">   6. import rxThread</font>
+<font color="red">   7. import serialData</font>
+<font color="red">   8. import packetGenerator</font>
+<font color="black">   9. </font>
+<font color="black">  10. </font>
+<font color="red">  11. BYTES = 10240</font>
+<font color="red">  12. PORTS = [</font>
+<font color="black">  13. 	'/dev/serial/by-path/platform-musb-hdrc.0.auto-usb-0:1.1:1.0',</font>
+<font color="black">  14. 	'/dev/serial/by-path/platform-musb-hdrc.0.auto-usb-0:1.1:1.2',</font>
+<font color="black">  15. 	'/dev/serial/by-path/platform-musb-hdrc.0.auto-usb-0:1.1:1.4',</font>
+<font color="black">  16. 	'/dev/serial/by-path/platform-musb-hdrc.0.auto-usb-0:1.1:1.6',</font>
+<font color="black">  17. 	'/dev/serial/by-path/platform-musb-hdrc.0.auto-usb-0:1.2:1.0',</font>
+<font color="black">  18. 	'/dev/serial/by-path/platform-musb-hdrc.0.auto-usb-0:1.2:1.2',</font>
+<font color="black">  19. 	'/dev/serial/by-path/platform-musb-hdrc.0.auto-usb-0:1.2:1.4',</font>
+<font color="black">  20. 	'/dev/serial/by-path/platform-musb-hdrc.0.auto-usb-0:1.2:1.6',</font>
+<font color="black">  21. ]</font>
+<font color="black">  22. </font>
+<font color="red">  23. allRunning = True</font>
+<font color="black">  24. </font>
+<font color="black">  25. </font>
+<font color="red">  26. def try_run_threads(port_threads):</font>
+<font color="black">  27. 	global allRunning  # NOTE: Not needed here</font>
+<font color="black">  28. 	# catch any exception that may occure durring execution</font>
+<font color="red">  29. 	try:</font>
+<font color="red">  30. 		ports_not_released = port_threads[:]</font>
+<font color="black">  31. 		# start each port thread running</font>
+<font color="red">  32. 		for (threadEvent, rx, tx) in port_threads:</font>
+<font color="red">  33. 			tx.start()</font>
+<font color="red">  34. 			rx.start()</font>
+<font color="black">  35. 		# wait for rx and tx to both data_get_obj.thread_get_startup() (open serial port) and then to sync</font>
+<font color="red">  36. 		while len(ports_not_released) is not 0:</font>
+<font color="red">  37. 			release = []</font>
+<font color="black">  38. 			# Allow context switch</font>
+<font color="red">  39. 			time.sleep(0.0)</font>
+<font color="black">  40. 			# loop through each port_threads and check if it can be released</font>
+<font color="red">  41. 			for port_threads in ports_not_released:</font>
+<font color="red">  42. 				(threadEvent, rx, tx) = port_threads</font>
+<font color="red">  43. 				if rx.syncRxTxEvent.is_set() and tx.syncRxTxEvent.is_set():</font>
+<font color="black">  44. 					# release both threads to run</font>
+<font color="red">  45. 					threadEvent.set()</font>
+<font color="red">  46. 					release.append(port_threads)</font>
+<font color="black">  47. 			# remove the released thread from ports_not_released</font>
+<font color="red">  48. 			for port_threads in release:</font>
+<font color="red">  49. 				ports_not_released.pop(port_threads)</font>
+<font color="black">  50. </font>
+<font color="black">  51. 		# loop while threads are running</font>
+<font color="red">  52. 		startTime = time.time()</font>
+<font color="red">  53. 		while allRunning:</font>
+<font color="red">  54. 			time.sleep(0.5)</font>
+<font color="red">  55. 	except:</font>
+<font color="black">  56. 		# EXCEPTION OCCURED - clean up all threads and get them to stop</font>
+<font color="red">  57. 		print '\n' + getExceptionInfo()</font>
+<font color="black">  58. 		# clean up port threads</font>
+<font color="red">  59. 		for (threadEvent, rx, tx) in port_threads:</font>
+<font color="black">  60. 			# clean up the RxThread, TxThread, and thread_event</font>
+<font color="red">  61. 			if not rx.syncRxTxEvent.is_set():</font>
+<font color="red">  62. 				rx.syncRxTxEvent.set()</font>
+<font color="red">  63. 			if not tx.syncRxTxEvent.is_set():</font>
+<font color="red">  64. 				tx.syncRxTxEvent.set()</font>
+<font color="red">  65. 			if not threadEvent.is_set():</font>
+<font color="red">  66. 				threadEvent.set()</font>
+<font color="red">  67. 			tx.running = False</font>
+<font color="red">  68. 			tx.running = False</font>
+<font color="red">  69. 			try:</font>
+<font color="black">  70. 				# may cause aditional error if lock is held</font>
+<font color="black">  71. 				# and in particular place in code flow</font>
+<font color="red">  72. 				rx.runLock.release()</font>
+<font color="red">  73. 			except:</font>
+<font color="red">  74. 				pass</font>
+<font color="red">  75. 			try:</font>
+<font color="black">  76. 				# may cause aditional error if lock is held</font>
+<font color="black">  77. 				# and in particular place in code flow</font>
+<font color="red">  78. 				tx.runLock.release()</font>
+<font color="red">  79. 			except:</font>
+<font color="red">  80. 				pass</font>
+<font color="black">  81. 	else:</font>
+<font color="black">  82. 		# STOP ALL THREADS GRACEFULLY</font>
+<font color="red">  83. 		for (threadEvent, rx, tx) in port_threads:</font>
+<font color="black">  84. 			# TxThread</font>
+<font color="red">  85. 			tx.runLock.acquire()</font>
+<font color="red">  86. 			tx.running = False</font>
+<font color="red">  87. 			tx.runLock.release()</font>
+<font color="black">  88. 			# RxThread</font>
+<font color="red">  89. 			rx.runLock.acquire()</font>
+<font color="red">  90. 			rx.running = False</font>
+<font color="red">  91. 			rx.runLock.release()</font>
+<font color="red">  92. 		raise</font>
+<font color="black">  93. 	finally:</font>
+<font color="black">  94. 		# JOIN all threads started in run_threads(port_threads)</font>
+<font color="red">  95. 		thread_list = []</font>
+<font color="red">  96. 		for (threadEvent, rx, tx) in port_threads:</font>
+<font color="red">  97. 			thread_list += [rx, tx]</font>
+<font color="red">  98. 		while len(thread_list):</font>
+<font color="red">  99. 			for index in range(len(thread_list)):</font>
+<font color="red"> 100. 				if not thread_list[index].is_alive():</font>
+<font color="red"> 101. 					print '\nThread {name} has terminated'.format(name=thread_list[index].threadName)</font>
+<font color="red"> 102. 					thread_list[index].join()</font>
+<font color="red"> 103. 					thread_list.pop(index)</font>
+<font color="black"> 104. 					# start from the beginning again</font>
+<font color="red"> 105. 					break</font>
+<font color="red"> 106. 			print '\r{num} threads still running', ' ' * 6,</font>
+<font color="red"> 107. 		print ''</font>
+<font color="black"> 108. </font>
+<font color="black"> 109. </font>
+<font color="red"> 110. def create_serial_port_threads(port, threadId, pktGenThread, msgQueue):</font>
+<font color="red"> 111. 	ser = serialData.SerialData(</font>
+<font color="black"> 112. 		port=port,</font>
+<font color="black"> 113. 		packetSource=pktGenThread,</font>
+<font color="black"> 114. 		msgQueue=msgQueue,</font>
+<font color="black"> 115. 		readTimeout=0.1,</font>
+<font color="black"> 116. 		writeTimeout=None,</font>
+<font color="black"> 117. 		interCharTimeout=None)</font>
+<font color="red"> 118. 	tx_threadId = threadId</font>
+<font color="red"> 119. 	rx_threadId = threadId + 1</font>
+<font color="red"> 120. 	threadEvent = threading.Event()</font>
+<font color="red"> 121. 	rx = rxThread.RxThread('RX {port}'.format(port=sendObj.port),</font>
+<font color="black"> 122. 						   rx_threadId, ser, msgQueue, threadEvent)</font>
+<font color="red"> 123. 	tx = txThread.TxThread('TX {port}'.format(port=sendObj.port),</font>
+<font color="black"> 124. 						   tx_threadId, ser, msgQueue, threadEvent)</font>
+<font color="red"> 125. 	return (threadEvent, rx, tx)</font>
+<font color="black"> 126. </font>
+<font color="black"> 127. </font>
+<font color="red"> 128. def main():</font>
+<font color="red"> 129. 	threadId = 1</font>
+<font color="red"> 130. 	msgQueue = Queue.Queue()</font>
+<font color="red"> 131. 	pktGenThread = packetGenerator.PacketGenerator('PacketGenerator',</font>
+<font color="black"> 132. 												   threadID=threadId, msgQueue=msgQueue, numBytes=BYTES,</font>
+<font color="black"> 133. 												   printableChars=False)</font>
+<font color="red"> 134. 	try:</font>
+<font color="red"> 135. 		pktGenThread.start()</font>
+<font color="black"> 136. 		# create threads for each RX and TX port thread</font>
+<font color="red"> 137. 		port_threads = []</font>
+<font color="red"> 138. 		threadId += 1</font>
+<font color="red"> 139. 		for port in PORTS:</font>
+<font color="black"> 140. 			# notify packet generating thread there is more packets that need to be made</font>
+<font color="red"> 141. 			pktGenThread.acquire()</font>
+<font color="red"> 142. 			pktGenThread.number += 2</font>
+<font color="red"> 143. 			pktGenThread.packetUsed.set()</font>
+<font color="red"> 144. 			pktGenThread.release()</font>
+<font color="black"> 145. 			# Create the threads and events for the port</font>
+<font color="red"> 146. 			port_threads.append(create_serial_port_threads(port, threadId, pktGenThread, msgQueue))</font>
+<font color="red"> 147. 			threadId += 2  # RX and TX threads</font>
+<font color="black"> 148. 		# run the threads</font>
+<font color="red"> 149. 		try_run_threads(pktGenThread, port_threads)</font>
+<font color="red"> 150. 	except:</font>
+<font color="black"> 151. 		# EXCEPTION OCCURED - clean up all threads and get them to stop</font>
+<font color="red"> 152. 		print '\n' + getExceptionInfo()</font>
+<font color="black"> 153. 		# clean up pktGenThread</font>
+<font color="red"> 154. 		if not pktGenThread.packetUsed.is_set():</font>
+<font color="red"> 155. 			pktGenThread.packetUsed.set()</font>
+<font color="red"> 156. 		pktGenThread.running = False</font>
+<font color="red"> 157. 		try:</font>
+<font color="black"> 158. 			# may cause aditional error if lock is held</font>
+<font color="black"> 159. 			# and in particular place in code flow</font>
+<font color="red"> 160. 			pktGenThread.running_lock.release()</font>
+<font color="red"> 161. 		except:</font>
+<font color="red"> 162. 			pass</font>
+<font color="black"> 163. 	finally:</font>
+<font color="black"> 164. 		# Stop the pktGenThread</font>
+<font color="red"> 165. 		pktGenThread.running_lock.acquire()</font>
+<font color="red"> 166. 		pktGenThread.running = False</font>
+<font color="red"> 167. 		pktGenThread.running_lock.release()</font>
+<font color="black"> 168. 		# JOIN pktGenThread</font>
+<font color="red"> 169. 		pktGenThread.join()</font>
+<font color="black"> 170. </font>
+<font color="black"> 171. </font>
+<font color="red"> 172. if __name__ == '__main__':</font>
+<font color="red"> 173. 	main()</font>
+<font color="black"> 174. </font>
+<font color="black"> 175. </font>
+<font color="red"> 176. def getExceptionInfo():</font>
+<font color="red"> 177. 	exc_type, exc_obj, exc_tb = sys.exc_info()</font>
+<font color="red"> 178. 	fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]</font>
+<font color="red"> 179. 	if (exc_type is None or exc_obj is None or exc_tb is None):</font>
+<font color="red"> 180. 		return 'No Exception Encountered'</font>
+<font color="red"> 181. 	error_out = 'Exception Encountered'</font>
+<font color="red"> 182. 	error_out += '{0}\n'.format('=' * 80)</font>
+<font color="red"> 183. 	error_out += 'lineno:{lineno}, fname:{fname}'.format(fname=fname, lineno=exc_tb.tb_lineno)</font>
+<font color="red"> 184. 	for line in traceback.format_tb(exc_tb):</font>
+<font color="red"> 185. 		error_out += '{0}\n'.format(line)</font>
+<font color="red"> 186. 	return ('\n{line:80}\n{out}\n{line:80}'.format(line='#' * 80, out=error_out))</font>
+</pre>
+

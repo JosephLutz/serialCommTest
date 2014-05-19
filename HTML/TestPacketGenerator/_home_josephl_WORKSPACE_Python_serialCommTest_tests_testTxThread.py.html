@@ -1,0 +1,123 @@
+source file: <b>/home/josephl/WORKSPACE/Python/serialCommTest/tests/testTxThread.py</b><br>
+
+
+file stats: <b>89 lines, 0 executed: 0.0% covered</b>
+<pre>
+<font color="black">   1. # txThread_test</font>
+<font color="black">   2. </font>
+<font color="red">   3. import threading</font>
+<font color="red">   4. import unittest</font>
+<font color="red">   5. import Queue</font>
+<font color="red">   6. import time</font>
+<font color="red">   7. import sys</font>
+<font color="red">   8. import os</font>
+<font color="black">   9. </font>
+<font color="red">  10. if __name__ == '__main__':</font>
+<font color="red">  11. 	importDirectory = os.getcwd()</font>
+<font color="red">  12. 	if os.path.basename(importDirectory) in ['tests']:</font>
+<font color="red">  13. 		importDirectory = os.path.dirname(importDirectory)</font>
+<font color="red">  14. 	sys.path = [importDirectory] + sys.path</font>
+<font color="black">  15. </font>
+<font color="black">  16. # Module to test</font>
+<font color="red">  17. import txThread</font>
+<font color="red">  18. import threadMonitor</font>
+<font color="black">  19. </font>
+<font color="black">  20. </font>
+<font color="red">  21. class DataSendObj():</font>
+<font color="red">  22. 	def __init__(self):</font>
+<font color="red">  23. 		self.test_thread_send_startup = False</font>
+<font color="red">  24. 		self.test_thread_send_start = False</font>
+<font color="red">  25. 		self.test_send_data = False</font>
+<font color="red">  26. 		self.test_thread_send_stop = False</font>
+<font color="red">  27. 		self.data_send_obj_lock = threading.Lock()</font>
+<font color="red">  28. 		self.loop = True</font>
+<font color="black">  29. </font>
+<font color="red">  30. 	def thread_send_startup(self):</font>
+<font color="red">  31. 		self.test_thread_send_startup = True</font>
+<font color="black">  32. </font>
+<font color="red">  33. 	def thread_send_start(self):</font>
+<font color="red">  34. 		self.test_thread_send_start = True</font>
+<font color="black">  35. </font>
+<font color="red">  36. 	def send_data(self):</font>
+<font color="red">  37. 		self.test_send_data = True</font>
+<font color="red">  38. 		self.data_send_obj_lock.acquire()</font>
+<font color="red">  39. 		loop = self.loop</font>
+<font color="red">  40. 		self.data_send_obj_lock.release()</font>
+<font color="red">  41. 		return loop</font>
+<font color="black">  42. </font>
+<font color="red">  43. 	def thread_send_stop(self):</font>
+<font color="red">  44. 		self.test_thread_send_stop = True</font>
+<font color="black">  45. </font>
+<font color="black">  46. </font>
+<font color="red">  47. class TestTxThread(unittest.TestCase):</font>
+<font color="red">  48. 	def setUp(self):</font>
+<font color="red">  49. 		threadMonitor.ThreadMonitor.threadMapLock.acquire()</font>
+<font color="red">  50. 		threadMonitor.ThreadMonitor.threadMap = {}</font>
+<font color="red">  51. 		threadMonitor.ThreadMonitor.threadMapLock.release()</font>
+<font color="red">  52. 		threadMonitor.ThreadMonitor.threadMapLock = threading.Lock()</font>
+<font color="red">  53. 		threadMonitor.ThreadMonitor.msg_queue = Queue.Queue()</font>
+<font color="black">  54. </font>
+<font color="red">  55. 	def test_object_creation(self):</font>
+<font color="red">  56. 		send_obj = DataSendObj()</font>
+<font color="red">  57. 		thread_event = threading.Event()</font>
+<font color="black">  58. 		# test that the object is created with minimal arguments</font>
+<font color="red">  59. 		tx = txThread.TxThread(send_obj)</font>
+<font color="red">  60. 		self.assertTrue(isinstance(tx, txThread.TxThread))</font>
+<font color="black">  61. 		# test that the object is created with all arguments</font>
+<font color="red">  62. 		tx = txThread.TxThread(send_obj, thread_event, name='tx_thread-unittest-1')</font>
+<font color="red">  63. 		self.assertTrue(isinstance(tx, txThread.TxThread))</font>
+<font color="black">  64. 		# test the msg_queue gets a message (a message is a tuple of three items)</font>
+<font color="red">  65. 		msg = threadMonitor.ThreadMonitor.msg_queue.get()</font>
+<font color="red">  66. 		self.assertTrue(isinstance(msg, tuple) and len(msg) is 3)</font>
+<font color="black">  67. </font>
+<font color="red">  68. 	def test_thread(self):</font>
+<font color="red">  69. 		send_obj = DataSendObj()</font>
+<font color="red">  70. 		thread_event = threading.Event()</font>
+<font color="red">  71. 		tx = txThread.TxThread(send_obj, thread_event, name='tx_thread-unittest-2')</font>
+<font color="red">  72. 		try:</font>
+<font color="red">  73. 			self.assertFalse(tx.sync_rxtx_event.is_set())</font>
+<font color="red">  74. 			tx.start()</font>
+<font color="red">  75. 			tx.sync_rxtx_event.wait()</font>
+<font color="red">  76. 			tx.running_lock.acquire()</font>
+<font color="red">  77. 			self.assertTrue(tx.sync_rxtx_event.is_set())</font>
+<font color="red">  78. 			self.assertTrue(tx.running)</font>
+<font color="red">  79. 			self.assertTrue(send_obj.test_thread_send_startup)</font>
+<font color="red">  80. 			self.assertFalse(thread_event.is_set())</font>
+<font color="red">  81. 			thread_event.set()</font>
+<font color="red">  82. 			tx.running_lock.release()</font>
+<font color="black">  83. 			# Allow context switch and release of thread_event.wait()</font>
+<font color="red">  84. 			time.sleep(0.001)</font>
+<font color="red">  85. 			tx.running_lock.acquire()</font>
+<font color="red">  86. 			self.assertTrue(thread_event.is_set())</font>
+<font color="red">  87. 			self.assertTrue(send_obj.test_thread_send_start)</font>
+<font color="red">  88. 			tx.running_lock.release()</font>
+<font color="red">  89. 			start_time = time.time()</font>
+<font color="black">  90. 			# run the thread for 1.5 seconds</font>
+<font color="red">  91. 			while (time.time() - start_time) &lt; 0.05:</font>
+<font color="red">  92. 				self.assertTrue(send_obj.test_send_data)</font>
+<font color="red">  93. 			send_obj.data_send_obj_lock.acquire()</font>
+<font color="red">  94. 			send_obj.loop = False</font>
+<font color="red">  95. 			send_obj.data_send_obj_lock.release()</font>
+<font color="black">  96. 			# Allow context switch</font>
+<font color="red">  97. 			time.sleep(0.01)</font>
+<font color="red">  98. 			self.assertTrue(send_obj.test_thread_send_stop)</font>
+<font color="red">  99. 			self.assertTrue(True)</font>
+<font color="red"> 100. 		except BaseException:</font>
+<font color="red"> 101. 			self.assertTrue(False)</font>
+<font color="black"> 102. 			# clean-up</font>
+<font color="red"> 103. 			if not thread_event.is_set():</font>
+<font color="red"> 104. 				thread_event.set()</font>
+<font color="red"> 105. 			raise</font>
+<font color="black"> 106. 		finally:</font>
+<font color="red"> 107. 			self.assertFalse(tx.running)</font>
+<font color="red"> 108. 			tx.join()</font>
+<font color="black"> 109. </font>
+<font color="black"> 110. </font>
+<font color="red"> 111. def runtests():</font>
+<font color="red"> 112. 	unittest.main()</font>
+<font color="black"> 113. </font>
+<font color="black"> 114. </font>
+<font color="red"> 115. if __name__ == '__main__':</font>
+<font color="red"> 116. 	runtests()</font>
+</pre>
+

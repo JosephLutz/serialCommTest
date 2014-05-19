@@ -1,0 +1,128 @@
+source file: <b>/home/josephl/WORKSPACE/Python/serialCommTest/threadMonitor.py</b><br>
+
+
+file stats: <b>74 lines, 71 executed: 95.9% covered</b>
+<pre>
+<font color="black">   1. # msgMonitor</font>
+<font color="green">   2. import threading</font>
+<font color="green">   3. import Queue</font>
+<font color="black">   4. </font>
+<font color="green">   5. from config import *</font>
+<font color="black">   6. </font>
+<font color="black">   7. </font>
+<font color="green">   8. class ThreadMonitorException(BaseException):</font>
+<font color="green">   9. 	&quot;&quot;&quot;Thread exceptions originating in the ThreadMonitor&quot;&quot;&quot;</font>
+<font color="black">  10. </font>
+<font color="black">  11. </font>
+<font color="green">  12. class ThreadMonitor(threading.Thread):</font>
+<font color="black">  13. 	# static dictionary of all threads</font>
+<font color="green">  14. 	threadMap = {}</font>
+<font color="green">  15. 	threadMapLock = threading.Lock()</font>
+<font color="black">  16. 	# the queue for ordering, storing and then displaying thread messages</font>
+<font color="green">  17. 	msg_queue = Queue.Queue()</font>
+<font color="black">  18. </font>
+<font color="green">  19. 	def __init__(self, *args, **kwargs):</font>
+<font color="green">  20. 		super(ThreadMonitor, self).__init__(*args, **kwargs)</font>
+<font color="green">  21. 		self.running_lock = threading.Lock()</font>
+<font color="black">  22. 		# value stating weather the thread should continue to execute or</font>
+<font color="black">  23. 		# terminate at the earliest possibility</font>
+<font color="green">  24. 		self.running = False</font>
+<font color="black">  25. 		# set thread_id</font>
+<font color="green">  26. 		self.threadMapLock.acquire()</font>
+<font color="green">  27. 		available_id = (set(xrange(START_THREAD_ID, MAX_THREAD_ID)) -</font>
+<font color="green">  28. 			set(self.threadMap.keys()))</font>
+<font color="green">  29. 		if len(available_id) is 0:</font>
+<font color="green">  30. 			self.threadMapLock.release()</font>
+<font color="green">  31. 			raise ThreadMonitorException</font>
+<font color="green">  32. 		self.thread_id = available_id.pop()</font>
+<font color="green">  33. 		self.threadMap[self.thread_id] = self</font>
+<font color="green">  34. 		self.threadMapLock.release()</font>
+<font color="black">  35. </font>
+<font color="green">  36. 	def run(self):</font>
+<font color="green">  37. 		self.running_lock.acquire()</font>
+<font color="green">  38. 		self.running = True</font>
+<font color="green">  39. 		try:</font>
+<font color="black">  40. 			# run the thread</font>
+<font color="green">  41. 			self.locked_running()</font>
+<font color="green">  42. 		except:</font>
+<font color="black">  43. 			# cleanup when any exception occurs</font>
+<font color="green">  44. 			if not self.running_lock.locked():</font>
+<font color="green">  45. 				self.running_lock.acquire()</font>
+<font color="green">  46. 			self.running = False</font>
+<font color="green">  47. 			raise</font>
+<font color="black">  48. 		finally:</font>
+<font color="black">  49. 			# cleanup threadMap of this thread</font>
+<font color="green">  50. 			self.threadMapLock.acquire()</font>
+<font color="green">  51. 			self.threadMap[self.thread_id] = None</font>
+<font color="green">  52. 			self.threadMapLock.release()</font>
+<font color="black">  53. 			# release the running_lock</font>
+<font color="green">  54. 			self.running_lock.release()</font>
+<font color="black">  55. </font>
+<font color="green">  56. 	def locked_running(self):</font>
+<font color="red">  57. 		pass</font>
+<font color="black">  58. </font>
+<font color="green">  59. 	def join(self, *args, **kwargs):</font>
+<font color="black">  60. 		# Inform the thread to terminate if still running</font>
+<font color="green">  61. 		self.running_lock.acquire()</font>
+<font color="green">  62. 		if self.running:</font>
+<font color="green">  63. 			self.running = False</font>
+<font color="green">  64. 		self.running_lock.release()</font>
+<font color="black">  65. 		# wait for the thread to terminate</font>
+<font color="green">  66. 		threading.Thread.join(self, *args, **kwargs)</font>
+<font color="black">  67. </font>
+<font color="green">  68. 	@staticmethod</font>
+<font color="black">  69. 	def join_all():</font>
+<font color="green">  70. 		ThreadMonitor.threadMapLock.acquire()</font>
+<font color="black">  71. 		# inform all threads to terminate</font>
+<font color="green">  72. 		for threadMapKey in ThreadMonitor.threadMap:</font>
+<font color="green">  73. 			if ThreadMonitor.threadMap[threadMapKey] is None:</font>
+<font color="green">  74. 				continue</font>
+<font color="green">  75. 			ThreadMonitor.threadMapLock.release()</font>
+<font color="green">  76. 			ThreadMonitor.threadMap[threadMapKey].running_lock.acquire()</font>
+<font color="green">  77. 			if ThreadMonitor.threadMap[threadMapKey].running:</font>
+<font color="green">  78. 				ThreadMonitor.threadMap[threadMapKey].running = False</font>
+<font color="green">  79. 			ThreadMonitor.threadMap[threadMapKey].running_lock.release()</font>
+<font color="green">  80. 			ThreadMonitor.threadMapLock.acquire()</font>
+<font color="black">  81. 		# Wait for each thread to be joined in succession</font>
+<font color="green">  82. 		for threadMapKey in ThreadMonitor.threadMap:</font>
+<font color="green">  83. 			if ThreadMonitor.threadMap[threadMapKey] is not None:</font>
+<font color="green">  84. 				ThreadMonitor.threadMapLock.release()</font>
+<font color="green">  85. 				ThreadMonitor.threadMap[threadMapKey].join()</font>
+<font color="green">  86. 				ThreadMonitor.threadMapLock.acquire()</font>
+<font color="green">  87. 				ThreadMonitor.threadMap[threadMapKey] = None</font>
+<font color="green">  88. 		ThreadMonitor.threadMapLock.release()</font>
+<font color="black">  89. </font>
+<font color="green">  90. 	@staticmethod</font>
+<font color="black">  91. 	def clean_terminated():</font>
+<font color="green">  92. 		thread_ids_to_clean = []</font>
+<font color="black">  93. 		# release the thread_ids for all thread_ids marked as None (terminated threads)</font>
+<font color="green">  94. 		ThreadMonitor.threadMapLock.acquire()</font>
+<font color="black">  95. 		# find which threads to clean</font>
+<font color="green">  96. 		for threadMapKey in ThreadMonitor.threadMap:</font>
+<font color="green">  97. 			if ThreadMonitor.threadMap[threadMapKey] is None:</font>
+<font color="green">  98. 				thread_ids_to_clean.append(threadMapKey)</font>
+<font color="black">  99. 		# clean the thread_ids</font>
+<font color="green"> 100. 		for threadMapKey in thread_ids_to_clean:</font>
+<font color="green"> 101. 			ThreadMonitor.threadMap.pop(threadMapKey, None)</font>
+<font color="green"> 102. 		ThreadMonitor.threadMapLock.release()</font>
+<font color="black"> 103. </font>
+<font color="black"> 104. </font>
+<font color="green"> 105. if __name__ == '__main__':</font>
+<font color="red"> 106. 	import tests.testThreadMonitor</font>
+<font color="red"> 107. 	tests.testThreadMonitor.runtests()</font>
+<font color="black"> 108. </font>
+<font color="black"> 109. # Message are placed onto the Queue named msg_queue.</font>
+<font color="black"> 110. # These messages are a tuple of three items. A threadId, message data,</font>
+<font color="black"> 111. # and a string message.</font>
+<font color="black"> 112. # threadId: This gives which thread is sending the message.</font>
+<font color="black"> 113. #     If the thread is the main thread then the threadId is None.</font>
+<font color="black"> 114. # message data: Either a dictionary of key, value pairs or None for no data sent.</font>
+<font color="black"> 115. #     The key, value pairs will be used in formatting the message string.</font>
+<font color="black"> 116. #     The keys in SPECIAL_MSG_DATA_KEYS will be used else where and for the</font>
+<font color="black"> 117. #     formatting will be empty strings.</font>
+<font color="black"> 118. # string message: is ether an int, string, or unicode. If the type is int,</font>
+<font color="black"> 119. #     there is a lookup dictionary in messageQueueMessages for common messages.</font>
+<font color="black"> 120. #     Otherwise use the string message with the message data as it's</font>
+<font color="black"> 121. #     format parameters.</font>
+</pre>
+

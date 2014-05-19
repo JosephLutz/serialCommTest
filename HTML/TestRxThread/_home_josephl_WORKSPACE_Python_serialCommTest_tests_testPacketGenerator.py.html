@@ -1,0 +1,184 @@
+source file: <b>/home/josephl/WORKSPACE/Python/serialCommTest/tests/testPacketGenerator.py</b><br>
+
+
+file stats: <b>130 lines, 0 executed: 0.0% covered</b>
+<pre>
+<font color="black">   1. # packetGenerator_test</font>
+<font color="black">   2. </font>
+<font color="red">   3. import traceback</font>
+<font color="red">   4. import threading</font>
+<font color="red">   5. import unittest</font>
+<font color="red">   6. import Queue</font>
+<font color="red">   7. import time</font>
+<font color="red">   8. import sys</font>
+<font color="red">   9. import os</font>
+<font color="black">  10. </font>
+<font color="red">  11. if __name__ == '__main__':</font>
+<font color="red">  12. 	importDirectory = os.getcwd()</font>
+<font color="red">  13. 	if os.path.basename(importDirectory) in ['tests']:</font>
+<font color="red">  14. 		importDirectory = os.path.dirname(importDirectory)</font>
+<font color="red">  15. 	sys.path = [importDirectory] + sys.path</font>
+<font color="black">  16. </font>
+<font color="black">  17. # Module to test</font>
+<font color="red">  18. import packetGenerator</font>
+<font color="red">  19. import threadMonitor</font>
+<font color="red">  20. from config import *</font>
+<font color="black">  21. </font>
+<font color="black">  22. </font>
+<font color="red">  23. def get_exception_info():</font>
+<font color="black">  24. 	&quot;&quot;&quot;</font>
+<font color="black">  25. 	Gathers information about a caught exception.</font>
+<font color="black">  26. 	This is used when I cause other exceptions in an except clause</font>
+<font color="black">  27. </font>
+<font color="black">  28. 	:rtype : string</font>
+<font color="black">  29. 	&quot;&quot;&quot;</font>
+<font color="red">  30. 	exc_type, exc_obj, exc_tb = sys.exc_info()</font>
+<font color="red">  31. 	fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]</font>
+<font color="red">  32. 	if exc_type is None or exc_obj is None or exc_tb is None:</font>
+<font color="red">  33. 		return 'No Exception Encountered'</font>
+<font color="red">  34. 	error_out = 'Exception Encountered'</font>
+<font color="red">  35. 	error_out += '{0}\n'.format('=' * 80)</font>
+<font color="red">  36. 	error_out += 'lineno:{lineno}, fname:{fname}'.format(fname=fname, lineno=exc_tb.tb_lineno)</font>
+<font color="red">  37. 	for line in traceback.format_tb(exc_tb):</font>
+<font color="red">  38. 		error_out += '{0}\n'.format(line)</font>
+<font color="red">  39. 	return '\n{line:80}\n{out}\n{line:80}'.format(line='#' * 80, out=error_out)</font>
+<font color="black">  40. </font>
+<font color="black">  41. </font>
+<font color="red">  42. class TestPacketGenerator(unittest.TestCase):</font>
+<font color="red">  43. 	def setUp(self):</font>
+<font color="red">  44. 		packetGenerator.PacketGenerator.allocated_lock.acquire()</font>
+<font color="red">  45. 		packetGenerator.PacketGenerator.allocated = set()</font>
+<font color="red">  46. 		packetGenerator.PacketGenerator.ALLOCATABLE_PACKET_ID = set(xrange(MAX_PACKET_ID))</font>
+<font color="red">  47. 		packetGenerator.PacketGenerator.allocated_lock.release()</font>
+<font color="red">  48. 		packetGenerator.PacketGenerator.allocated_lock = threading.Lock()</font>
+<font color="red">  49. 		threadMonitor.ThreadMonitor.threadMapLock.acquire()</font>
+<font color="red">  50. 		threadMonitor.ThreadMonitor.threadMap = {}</font>
+<font color="red">  51. 		threadMonitor.ThreadMonitor.threadMapLock.release()</font>
+<font color="red">  52. 		threadMonitor.ThreadMonitor.threadMapLock = threading.Lock()</font>
+<font color="red">  53. 		threadMonitor.ThreadMonitor.msg_queue = Queue.Queue()</font>
+<font color="black">  54. </font>
+<font color="red">  55. 	def test_object_creation(self):</font>
+<font color="black">  56. 		# test that the object is created with minimal arguments</font>
+<font color="red">  57. 		pkt_gen = packetGenerator.PacketGenerator()</font>
+<font color="red">  58. 		self.assertTrue(isinstance(pkt_gen, packetGenerator.PacketGenerator))</font>
+<font color="black">  59. 		# test that the object is created with all arguments</font>
+<font color="red">  60. 		pkt_gen = packetGenerator.PacketGenerator(</font>
+<font color="black">  61. 			max_queue_size=10, num_rand_bytes=10000, printable_chars=True, seed='Seed String',</font>
+<font color="black">  62. 			name='PacketGenerator-unittest')</font>
+<font color="red">  63. 		self.assertTrue(isinstance(pkt_gen, packetGenerator.PacketGenerator))</font>
+<font color="black">  64. 		# test the msg_queue gets a message (a message is a tuple of three items)</font>
+<font color="red">  65. 		msg = threadMonitor.ThreadMonitor.msg_queue.get()</font>
+<font color="red">  66. 		self.assertTrue(isinstance(msg, tuple) and len(msg) is 3)</font>
+<font color="black">  67. </font>
+<font color="red">  68. 	def test_make_packet(self):</font>
+<font color="red">  69. 		pkt_gen = packetGenerator.PacketGenerator(</font>
+<font color="black">  70. 			max_queue_size=1, num_rand_bytes=10000, printable_chars=True, name='PacketGenerator-unittest')</font>
+<font color="red">  71. 		self.assertTrue(pkt_gen.queue.empty())</font>
+<font color="red">  72. 		packet = pkt_gen.make_packet()</font>
+<font color="red">  73. 		self.assertTrue(isinstance(packet, tuple))</font>
+<font color="red">  74. 		self.assertTrue(len(packet) is 4)</font>
+<font color="red">  75. 		self.assertTrue(packet[2] &lt;= MAX_PACKET_LENGTH)</font>
+<font color="red">  76. 		self.assertTrue(packet[2] &gt;= MIN_PACKET_LENGTH)</font>
+<font color="black">  77. </font>
+<font color="red">  78. 	def test_change_packet_length(self):</font>
+<font color="red">  79. 		pkt_gen = packetGenerator.PacketGenerator(</font>
+<font color="black">  80. 			max_queue_size=1, num_rand_bytes=10000, printable_chars=True, name='PacketGenerator-unittest')</font>
+<font color="red">  81. 		self.assertTrue(pkt_gen.queue.empty())</font>
+<font color="red">  82. 		try:</font>
+<font color="red">  83. 			pkt_gen.change_packet_length(packet_length=5)</font>
+<font color="red">  84. 			self.assertTrue(False)</font>
+<font color="red">  85. 		except BaseException:</font>
+<font color="red">  86. 			self.assertTrue(True)</font>
+<font color="red">  87. 		try:</font>
+<font color="red">  88. 			pkt_gen.change_packet_length(packet_length=50)</font>
+<font color="red">  89. 			self.assertTrue(True)</font>
+<font color="red">  90. 		except BaseException:</font>
+<font color="red">  91. 			self.assertTrue(False)</font>
+<font color="red">  92. 		pkt_gen.start()</font>
+<font color="black">  93. 		# pull packet off of Queue</font>
+<font color="red">  94. 		packet = pkt_gen.queue.get()</font>
+<font color="red">  95. 		self.assertTrue(isinstance(packet, tuple))</font>
+<font color="red">  96. 		self.assertTrue(len(packet) is 4)</font>
+<font color="red">  97. 		self.assertTrue(len(packet[0]) is 50)</font>
+<font color="red">  98. 		self.assertTrue(packet[1] &gt;= 0)</font>
+<font color="red">  99. 		self.assertTrue(packet[1] &lt;= MAX_PACKET_ID)</font>
+<font color="red"> 100. 		self.assertTrue(packet[2] is 50)</font>
+<font color="black"> 101. 		# difference between binary values and string representation using hex</font>
+<font color="red"> 102. 		self.assertTrue(len(packet[3]) == (PACKET_GENERATOR_HASHLIB_ALGORITHM().digest_size * 2))</font>
+<font color="black"> 103. 		# change the length</font>
+<font color="red"> 104. 		try:</font>
+<font color="red"> 105. 			pkt_gen.change_packet_length(packet_length=60)</font>
+<font color="red"> 106. 			self.assertTrue(True)</font>
+<font color="red"> 107. 		except BaseException:</font>
+<font color="red"> 108. 			self.assertTrue(False)</font>
+<font color="black"> 109. 		# pull packet off of Queue</font>
+<font color="red"> 110. 		packet = pkt_gen.queue.get()</font>
+<font color="red"> 111. 		self.assertTrue(isinstance(packet, tuple))</font>
+<font color="red"> 112. 		self.assertTrue(len(packet) is 4)</font>
+<font color="black"> 113. 		# length could be 50 or 60 depending what happened first, a new packet was generated,</font>
+<font color="black"> 114. 		# or the length was change and then a new packet was generated.</font>
+<font color="red"> 115. 		self.assertTrue((len(packet[0]) is 50) or (len(packet[0]) is 60))</font>
+<font color="red"> 116. 		self.assertTrue(packet[1] &gt;= 0)</font>
+<font color="red"> 117. 		self.assertTrue(packet[1] &lt;= MAX_PACKET_ID)</font>
+<font color="red"> 118. 		self.assertTrue((packet[2] is 50) or (packet[2] is 60))</font>
+<font color="black"> 119. 		# difference between binary values and string representation using hex</font>
+<font color="red"> 120. 		self.assertTrue(len(packet[3]) == (PACKET_GENERATOR_HASHLIB_ALGORITHM().digest_size * 2))</font>
+<font color="black"> 121. 		# pull packet off of Queue</font>
+<font color="red"> 122. 		packet = pkt_gen.queue.get()</font>
+<font color="red"> 123. 		self.assertTrue(isinstance(packet, tuple))</font>
+<font color="red"> 124. 		self.assertTrue(len(packet) is 4)</font>
+<font color="red"> 125. 		self.assertTrue(len(packet[0]) is 60)</font>
+<font color="red"> 126. 		self.assertTrue(packet[1] &gt;= 0)</font>
+<font color="red"> 127. 		self.assertTrue(packet[1] &lt;= MAX_PACKET_ID)</font>
+<font color="red"> 128. 		self.assertTrue(packet[2] is 60)</font>
+<font color="black"> 129. 		# Stop the thread</font>
+<font color="red"> 130. 		pkt_gen.running_lock.acquire()</font>
+<font color="red"> 131. 		pkt_gen.running = False</font>
+<font color="red"> 132. 		pkt_gen.running_lock.release()</font>
+<font color="black"> 133. 		# wait for the thread to terminate</font>
+<font color="red"> 134. 		pkt_gen.join()</font>
+<font color="red"> 135. 		self.assertTrue(pkt_gen.queue.empty())</font>
+<font color="black"> 136. </font>
+<font color="red"> 137. 	def test_thread(self):</font>
+<font color="red"> 138. 		packet_count = 0</font>
+<font color="red"> 139. 		pkt_gen = packetGenerator.PacketGenerator(</font>
+<font color="black"> 140. 			max_queue_size=1, num_rand_bytes=10000, printable_chars=True, name='PacketGenerator-unittest')</font>
+<font color="red"> 141. 		self.assertTrue(pkt_gen.queue.empty())</font>
+<font color="black"> 142. 		# specify a packet size</font>
+<font color="red"> 143. 		try:</font>
+<font color="red"> 144. 			pkt_gen.change_packet_length(packet_length=50)</font>
+<font color="red"> 145. 			self.assertTrue(True)</font>
+<font color="red"> 146. 		except BaseException:</font>
+<font color="red"> 147. 			self.assertTrue(False)</font>
+<font color="red"> 148. 		pkt_gen.start()</font>
+<font color="black"> 149. 		# run the thread for 1 second</font>
+<font color="red"> 150. 		start_time = time.time()</font>
+<font color="red"> 151. 		while (time.time() - start_time) &lt; 0.01:</font>
+<font color="black"> 152. 			# pull packet off of Queue</font>
+<font color="red"> 153. 			packet = pkt_gen.queue.get()</font>
+<font color="red"> 154. 			self.assertTrue(isinstance(packet, tuple))</font>
+<font color="red"> 155. 			self.assertTrue(len(packet) is 4)</font>
+<font color="red"> 156. 			self.assertTrue(len(packet[0]) is 50)</font>
+<font color="red"> 157. 			self.assertTrue(packet[1] &gt;= 0)</font>
+<font color="red"> 158. 			self.assertTrue(packet[1] &lt;= MAX_PACKET_ID)</font>
+<font color="red"> 159. 			self.assertTrue(packet[2] is 50)</font>
+<font color="black"> 160. 			# difference between binary values and string representation using hex</font>
+<font color="red"> 161. 			self.assertTrue(len(packet[3]) == (PACKET_GENERATOR_HASHLIB_ALGORITHM().digest_size * 2))</font>
+<font color="red"> 162. 			packet_count += 1</font>
+<font color="black"> 163. 		# Stop the thread</font>
+<font color="red"> 164. 		pkt_gen.running_lock.acquire()</font>
+<font color="red"> 165. 		pkt_gen.running = False</font>
+<font color="red"> 166. 		pkt_gen.running_lock.release()</font>
+<font color="black"> 167. 		# wait for the thread to terminate</font>
+<font color="red"> 168. 		pkt_gen.join()</font>
+<font color="red"> 169. 		self.assertTrue(pkt_gen.queue.empty())</font>
+<font color="black"> 170. </font>
+<font color="black"> 171. </font>
+<font color="red"> 172. def runtests():</font>
+<font color="red"> 173. 	unittest.main()</font>
+<font color="black"> 174. </font>
+<font color="black"> 175. </font>
+<font color="red"> 176. if __name__ == '__main__':</font>
+<font color="red"> 177. 	runtests()</font>
+</pre>
+

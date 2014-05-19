@@ -1,0 +1,329 @@
+source file: <b>/home/josephl/WORKSPACE/Python/serialCommTest/serialData.py</b><br>
+
+
+file stats: <b>181 lines, 0 executed: 0.0% covered</b>
+<pre>
+<font color="black">   1. # serialData</font>
+<font color="black">   2. </font>
+<font color="red">   3. import threading</font>
+<font color="red">   4. import select</font>
+<font color="red">   5. import termios</font>
+<font color="red">   6. import Queue</font>
+<font color="red">   7. import time</font>
+<font color="red">   8. import sys</font>
+<font color="red">   9. import os</font>
+<font color="black">  10. </font>
+<font color="red">  11. from OrionPythonModules import serial_settings</font>
+<font color="red">  12. import serial</font>
+<font color="red">  13. import threadMonitor</font>
+<font color="black">  14. </font>
+<font color="black">  15. </font>
+<font color="red">  16. if sys.hexversion &lt; 0x020100f0:</font>
+<font color="red">  17. 	import TERMIOS</font>
+<font color="black">  18. else:</font>
+<font color="red">  19. 	TERMIOS = termios</font>
+<font color="black">  20. </font>
+<font color="red">  21. from config import *</font>
+<font color="black">  22. </font>
+<font color="black">  23. </font>
+<font color="red">  24. class SerialData(serial.Serial):</font>
+<font color="black">  25. 	#Used by the tx_thread and rxThread as the DataSendObj and data_get_obj.</font>
+<font color="red">  26. 	LXM_MODE_VALUES = [</font>
+<font color="black">  27. 		u'RS-232', u'RS-485 2-wire',</font>
+<font color="black">  28. 		u'RS-485/422 4-wire', u'Loopback']</font>
+<font color="red">  29. 	LXM_SERIAL_TYPES = {</font>
+<font color="black">  30. 		u'RS232': LXM_MODE_VALUES[0],</font>
+<font color="black">  31. 		u'RS485': LXM_MODE_VALUES[1],</font>
+<font color="black">  32. 		u'RS422': LXM_MODE_VALUES[2],</font>
+<font color="black">  33. 		None: LXM_MODE_VALUES[3],}</font>
+<font color="black">  34. </font>
+<font color="red">  35. 	def __init__(self, port, packet_source, read_timeout=SERIAL_PORT_READ_TIMEOUT,</font>
+<font color="black">  36. 				 write_timeout=None, inter_char_timeout=None):</font>
+<font color="red">  37. 		super(SerialData, self).__init__(</font>
+<font color="black">  38. 			# number/name of device</font>
+<font color="black">  39. 			# numbering starts at zero. if everything fails, the user can specify</font>
+<font color="black">  40. 			# a device string, NOTE: that this isn't portable anymore.</font>
+<font color="black">  41. 			# The port will be opened if one is specified</font>
+<font color="black">  42. 			port=None,</font>
+<font color="black">  43. 			# baudrate</font>
+<font color="black">  44. 			baudrate=115200,</font>
+<font color="black">  45. 			# number of databits</font>
+<font color="black">  46. 			bytesize=serial.EIGHTBITS,</font>
+<font color="black">  47. 			#enable parity checking</font>
+<font color="black">  48. 			parity=serial.PARITY_NONE,</font>
+<font color="black">  49. 			#number of stopbits</font>
+<font color="black">  50. 			stopbits=serial.STOPBITS_ONE,</font>
+<font color="black">  51. 			#set a timeout value, None to wait forever</font>
+<font color="black">  52. 			timeout=read_timeout,</font>
+<font color="black">  53. 			#enable software flow control</font>
+<font color="black">  54. 			xonxoff=0,</font>
+<font color="black">  55. 			#enable RTS/CTS flow control</font>
+<font color="black">  56. 			rtscts=0,</font>
+<font color="black">  57. 			#set a timeout for writes</font>
+<font color="black">  58. 			writeTimeout=write_timeout,</font>
+<font color="black">  59. 			#None: use rtscts setting, dsrdtr override if true or false</font>
+<font color="black">  60. 			dsrdtr=None,</font>
+<font color="black">  61. 			#Inter-character timeout, None to disable</font>
+<font color="black">  62. 			interCharTimeout=inter_char_timeout)</font>
+<font color="red">  63. 		if isinstance(port, str) or isinstance(port, unicode):</font>
+<font color="red">  64. 			self.port = os.path.normpath(port)</font>
+<font color="black">  65. 		else:</font>
+<font color="black">  66. 			# Using an integer is not as specific (A guess is made).</font>
+<font color="red">  67. 			self.port = port</font>
+<font color="black">  68. 		# Queue for sending state back to messaging thread</font>
+<font color="red">  69. 		self.msg_queue = threadMonitor.ThreadMonitor.msg_queue</font>
+<font color="black">  70. 		# lock for when a thread needs exclusive access to the serial port</font>
+<font color="black">  71. 		# lock exclusive use of hardware</font>
+<font color="red">  72. 		self.port_lock = threading.Lock()</font>
+<font color="black">  73. 		# the next packet queued up to send</font>
+<font color="red">  74. 		self.packet_tuple = None</font>
+<font color="black">  75. 		# list of sent packet information</font>
+<font color="black">  76. 		# FORMAT: [(packetID, packetLength, hash), ...]</font>
+<font color="red">  77. 		self.sent_packets = []</font>
+<font color="black">  78. 		# place holder populated when the tx_thread is created</font>
+<font color="red">  79. 		self.tx_thread = None</font>
+<font color="black">  80. 		# data received (list of tuples, each containing data read and time since last read)</font>
+<font color="black">  81. 		# FORMAT: [(data, time), ...]</font>
+<font color="red">  82. 		self.read_buffer = []</font>
+<font color="black">  83. 		# place holder populated when the rxThread is created</font>
+<font color="red">  84. 		self.rx_thread = None</font>
+<font color="black">  85. 		# Queue that holds data packets to be sent</font>
+<font color="red">  86. 		self.packet_source = packet_source</font>
+<font color="red">  87. 		if self.msg_queue is not None:</font>
+<font color="red">  88. 			self.msg_queue.put((None, {'port': self.port}, CREATE_SERIAL_PORT))</font>
+<font color="black">  89. </font>
+<font color="red">  90. 	@staticmethod</font>
+<font color="black">  91. 	def set_serial_mode(mode=None):</font>
+<font color="red">  92. 		def mode_in(index_mode):</font>
+<font color="red">  93. 			if ((isinstance(index_mode, str) or isinstance(index_mode, unicode)) and</font>
+<font color="black">  94. 					(unicode(index_mode.upper()) in SerialData.LXM_SERIAL_TYPES.keys())):</font>
+<font color="red">  95. 				return SerialData.LXM_SERIAL_TYPES[index_mode]</font>
+<font color="red">  96. 			elif ((isinstance(index_mode, str) or isinstance(index_mode, unicode)) and</font>
+<font color="black">  97. 					(unicode(index_mode) in SerialData.LXM_SERIAL_TYPES.values())):</font>
+<font color="red">  98. 				return unicode(index_mode)</font>
+<font color="red">  99. 			elif (isinstance(index_mode, int) and</font>
+<font color="black"> 100. 					(index_mode &gt;= 0) and</font>
+<font color="black"> 101. 					(index_mode &lt; len(SerialData.LXM_MODE_VALUES))):</font>
+<font color="red"> 102. 				return SerialData.LXM_MODE_VALUES[index_mode]</font>
+<font color="black"> 103. 			else:</font>
+<font color="red"> 104. 				return u'Loopback'</font>
+<font color="black"> 105. </font>
+<font color="red"> 106. 		settings = serial_settings.SerialSettings()</font>
+<font color="red"> 107. 		settings.cards = [</font>
+<font color="black"> 108. 			{</font>
+<font color="black"> 109. 				'type': '124',</font>
+<font color="black"> 110. 				'ports': [{}, {}, {}, {}, ],</font>
+<font color="black"> 111. 			}, {</font>
+<font color="black"> 112. 				'type': '124',</font>
+<font color="black"> 113. 				'ports': [{}, {}, {}, {}, ],</font>
+<font color="black"> 114. 			}]</font>
+<font color="red"> 115. 		if isinstance(mode, tuple) and len(mode) is 8:</font>
+<font color="red"> 116. 			for mode_index in xrange(0, 4):</font>
+<font color="red"> 117. 				settings.cards[0]['ports'][mode_index]['type'] = mode_in(mode[mode_index])</font>
+<font color="red"> 118. 			for mode_index in xrange(0, 4):</font>
+<font color="red"> 119. 				settings.cards[1]['ports'][mode_index]['type'] = mode_in(mode[mode_index])</font>
+<font color="red"> 120. 		elif isinstance(mode, str) or isinstance(mode, unicode) or isinstance(mode, int):</font>
+<font color="red"> 121. 			mode = mode_in(mode)</font>
+<font color="red"> 122. 			for mode_index in xrange(0, 4):</font>
+<font color="red"> 123. 				settings.cards[0]['ports'][mode_index]['type'] = mode</font>
+<font color="red"> 124. 			for mode_index in xrange(0, 4):</font>
+<font color="red"> 125. 				settings.cards[1]['ports'][mode_index]['type'] = mode</font>
+<font color="black"> 126. 		else:</font>
+<font color="red"> 127. 			mode = 'Loopback'</font>
+<font color="red"> 128. 			for mode_index in xrange(0, 4):</font>
+<font color="red"> 129. 				settings.cards[0]['ports'][mode_index]['type'] = mode</font>
+<font color="red"> 130. 			for mode_index in xrange(0, 4):</font>
+<font color="red"> 131. 				settings.cards[1]['ports'][mode_index]['type'] = mode</font>
+<font color="red"> 132. 		settings.apply()</font>
+<font color="black"> 133. </font>
+<font color="red"> 134. 	def open_serial_port(self):</font>
+<font color="red"> 135. 		self.port_lock.acquire()</font>
+<font color="red"> 136. 		if not self.isOpen():</font>
+<font color="red"> 137. 			if not os.path.exists(self.port):</font>
+<font color="red"> 138. 				if self.msg_queue is not None:</font>
+<font color="red"> 139. 					self.msg_queue.put((self.tx_thread.thread_id, {'port': self.port}, PORT_NOT_EXIST))</font>
+<font color="red"> 140. 				self.port_lock.release()</font>
+<font color="red"> 141. 				return False</font>
+<font color="red"> 142. 			try:</font>
+<font color="red"> 143. 				self.open()</font>
+<font color="red"> 144. 			except serial.SerialException:</font>
+<font color="red"> 145. 				if not os.path.exists(self.port):</font>
+<font color="red"> 146. 					if self.msg_queue is not None:</font>
+<font color="red"> 147. 						self.msg_queue.put(</font>
+<font color="black"> 148. 							(self.tx_thread.thread_id, {'port': self.port}, SERIALEXCEPTION_OPEN_DISAPPEAR))</font>
+<font color="black"> 149. 				else:</font>
+<font color="red"> 150. 					if self.msg_queue is not None:</font>
+<font color="red"> 151. 						self.msg_queue.put(</font>
+<font color="black"> 152. 							(self.tx_thread.thread_id, {'port': self.port}, SERIALEXCEPTION_OPEN))</font>
+<font color="red"> 153. 				self.port_lock.release()</font>
+<font color="red"> 154. 				return False</font>
+<font color="red"> 155. 			if not self.isOpen():</font>
+<font color="red"> 156. 				if self.msg_queue is not None:</font>
+<font color="red"> 157. 					self.msg_queue.put(</font>
+<font color="black"> 158. 						(self.tx_thread.thread_id, {'port': self.port}, PORT_NOT_OPEN))</font>
+<font color="red"> 159. 				self.port_lock.release()</font>
+<font color="red"> 160. 				return False</font>
+<font color="red"> 161. 			if ENABLE_RTS_LINE:</font>
+<font color="black"> 162. 				# NOTE: Set RTS back to False as soon as possible after open.</font>
+<font color="black"> 163. 				#       open resets RTS True when RTS/CTS flow control disabled</font>
+<font color="black"> 164. 				# (re)set RTS to off</font>
+<font color="red"> 165. 				self.setRTS(False)</font>
+<font color="red"> 166. 			if ENABLE_DTR_LINE:</font>
+<font color="black"> 167. 				# set DTR to on</font>
+<font color="red"> 168. 				self.setDTR(True)</font>
+<font color="red"> 169. 			if ENABLE_TCDRAIN:</font>
+<font color="red"> 170. 				(iflag, oflag, cflag, lflag, ispeed, ospeed, cc) = (</font>
+<font color="black"> 171. 					termios.tcgetattr(self.fd))</font>
+<font color="red"> 172. 				iflag |= (TERMIOS.IGNBRK | TERMIOS.IGNPAR)</font>
+<font color="red"> 173. 				termios.tcsetattr(self.fd, TERMIOS.TCSANOW,</font>
+<font color="black"> 174. 					[iflag, oflag, cflag, lflag, ispeed, ospeed, cc])</font>
+<font color="red"> 175. 		if self.msg_queue is not None:</font>
+<font color="red"> 176. 			self.msg_queue.put((self.tx_thread.thread_id, {'port': self.port}, SERIAL_PORT_OPENED))</font>
+<font color="red"> 177. 		self.port_lock.release()</font>
+<font color="red"> 178. 		return True</font>
+<font color="black"> 179. </font>
+<font color="red"> 180. 	def close_serial_port(self):</font>
+<font color="red"> 181. 		self.port_lock.acquire()</font>
+<font color="red"> 182. 		if self.isOpen():</font>
+<font color="red"> 183. 			if ENABLE_RTS_LINE:</font>
+<font color="black"> 184. 				# set RTS to off</font>
+<font color="red"> 185. 				self.setRTS(False)</font>
+<font color="red"> 186. 			if ENABLE_DTR_LINE:</font>
+<font color="black"> 187. 				# set DTR to off</font>
+<font color="red"> 188. 				self.setDTR(False)</font>
+<font color="black"> 189. 			# close the port</font>
+<font color="red"> 190. 			self.close()</font>
+<font color="red"> 191. 		if self.msg_queue is not None:</font>
+<font color="red"> 192. 			self.msg_queue.put((self.tx_thread.thread_id, {'port': self.port}, SERIAL_PORT_CLOSED))</font>
+<font color="red"> 193. 		self.port_lock.release()</font>
+<font color="black"> 194. </font>
+<font color="black"> 195. 	#</font>
+<font color="black"> 196. 	# These methods determine how the port is used</font>
+<font color="black"> 197. 	#</font>
+<font color="red"> 198. 	def thread_send_startup(self):</font>
+<font color="red"> 199. 		self.sent_packets = []</font>
+<font color="black"> 200. 		# open the port</font>
+<font color="red"> 201. 		if not self.open_serial_port():</font>
+<font color="red"> 202. 			raise BaseException</font>
+<font color="black"> 203. </font>
+<font color="red"> 204. 	def thread_send_start(self):</font>
+<font color="red"> 205. 		try:</font>
+<font color="red"> 206. 			if self.packet_tuple is None:</font>
+<font color="red"> 207. 				self.packet_tuple = self.packet_source.queue.get(block=True, timeout=SERIAL_PORT_QUEUE_TIME)</font>
+<font color="red"> 208. 		except Queue.Empty:</font>
+<font color="red"> 209. 			return False</font>
+<font color="red"> 210. 		if ENABLE_RTS_LINE:</font>
+<font color="red"> 211. 			self.port_lock.acquire()</font>
+<font color="black"> 212. 			# set RTS to on</font>
+<font color="red"> 213. 			self.setRTS(True)</font>
+<font color="red"> 214. 			self.port_lock.release()</font>
+<font color="red"> 215. 			time.sleep(SERIAL_PORT_WARMUP_TIME)</font>
+<font color="red"> 216. 		return True</font>
+<font color="black"> 217. </font>
+<font color="red"> 218. 	def send_data(self):</font>
+<font color="red"> 219. 		start_time = time.time()</font>
+<font color="black"> 220. 		# get the self.packet_tuple from the Queue.</font>
+<font color="black"> 221. 		# First time there should already be a packet in self.packet_tuple</font>
+<font color="red"> 222. 		try:</font>
+<font color="red"> 223. 			if self.packet_tuple is None:</font>
+<font color="red"> 224. 				self.packet_tuple = self.packet_source.queue.get(block=True, timeout=SERIAL_PORT_QUEUE_TIME)</font>
+<font color="red"> 225. 		except Queue.Empty:</font>
+<font color="red"> 226. 			return False</font>
+<font color="black"> 227. 		# write the data</font>
+<font color="red"> 228. 		try:</font>
+<font color="red"> 229. 			if self.msg_queue is not None:</font>
+<font color="red"> 230. 				self.msg_queue.put(</font>
+<font color="black"> 231. 					(</font>
+<font color="black"> 232. 						self.tx_thread.thread_id,</font>
+<font color="black"> 233. 						{</font>
+<font color="black"> 234. 							'packetID': self.packet_tuple[1],</font>
+<font color="black"> 235. 							'time': (time.time() - start_time),</font>
+<font color="black"> 236. 							'packetLength': self.packet_tuple[2],</font>
+<font color="black"> 237. 						}, START_PACKET,</font>
+<font color="black"> 238. 					))</font>
+<font color="red"> 239. 			self.write(self.packet_tuple[0])</font>
+<font color="red"> 240. 			if self.msg_queue is not None:</font>
+<font color="red"> 241. 				self.msg_queue.put(</font>
+<font color="black"> 242. 					(self.tx_thread.thread_id,</font>
+<font color="black"> 243. 						{</font>
+<font color="black"> 244. 							'packetID': self.packet_tuple[1],</font>
+<font color="black"> 245. 							'time': (time.time() - start_time),</font>
+<font color="black"> 246. 							'packetLength': self.packet_tuple[2]</font>
+<font color="black"> 247. 						}, FINISH_PACKET,)</font>
+<font color="black"> 248. 				)</font>
+<font color="red"> 249. 		except serial.SerialTimeoutException:</font>
+<font color="red"> 250. 			if self.msg_queue is not None:</font>
+<font color="red"> 251. 				self.msg_queue.put((self.tx_thread.thread_id, {}, SERIAL_TIMEOUT))</font>
+<font color="black"> 252. 			# This packet gets dropped</font>
+<font color="red"> 253. 			self.packet_tuple = None</font>
+<font color="red"> 254. 			return False</font>
+<font color="black"> 255. 		# store tuple of packet info, everything except the data: (packetID, packetLength, hash)</font>
+<font color="red"> 256. 		self.sent_packets.append(self.packet_tuple[1:])</font>
+<font color="black"> 257. 		# keep track that the next time we need to get a packet from the queue</font>
+<font color="red"> 258. 		self.packet_tuple = None</font>
+<font color="red"> 259. 		return True</font>
+<font color="black"> 260. </font>
+<font color="red"> 261. 	def thread_send_stop(self):</font>
+<font color="red"> 262. 		if self.fd &gt; 0:</font>
+<font color="red"> 263. 			if ENABLE_RTS_LINE:</font>
+<font color="red"> 264. 				self.port_lock.acquire()</font>
+<font color="red"> 265. 				if ENABLE_TCDRAIN:</font>
+<font color="red"> 266. 					termios.tcdrain(self.fd)</font>
+<font color="red"> 267. 				time.sleep(SERIAL_PORT_COOLDOWN_TIME)</font>
+<font color="black"> 268. 				# set RTS to off</font>
+<font color="red"> 269. 				self.setRTS(False)</font>
+<font color="red"> 270. 				self.port_lock.release()</font>
+<font color="black"> 271. 		# use the message queue to send self.sent_packets</font>
+<font color="red"> 272. 		if self.msg_queue is not None:</font>
+<font color="red"> 273. 			self.msg_queue.put(</font>
+<font color="black"> 274. 				(</font>
+<font color="black"> 275. 					self.tx_thread.thread_id,</font>
+<font color="black"> 276. 					{SPECIAL_MSG_DATA_KEYS[SPECIAL_MSG__SENT_DATA]: self.sent_packets, },</font>
+<font color="black"> 277. 					REPORT_SENT_DATA</font>
+<font color="black"> 278. 				))</font>
+<font color="black"> 279. 		# if there was a packet in self.packet_tuple it will get dropped</font>
+<font color="black"> 280. 		# (NOTE: I think this will always be None already)</font>
+<font color="red"> 281. 		self.packet_tuple = None</font>
+<font color="black"> 282. </font>
+<font color="red"> 283. 	def thread_get_startup(self):</font>
+<font color="black"> 284. 		# reset the read_buffer</font>
+<font color="red"> 285. 		self.read_buffer = []</font>
+<font color="black"> 286. 		# open the port</font>
+<font color="red"> 287. 		if not self.open_serial_port():</font>
+<font color="red"> 288. 			raise BaseException</font>
+<font color="black"> 289. </font>
+<font color="red"> 290. 	def thread_get_start(self):</font>
+<font color="red"> 291. 		pass</font>
+<font color="black"> 292. </font>
+<font color="red"> 293. 	def get_data(self):</font>
+<font color="red"> 294. 		reading = True</font>
+<font color="red"> 295. 		bytes_read = 0</font>
+<font color="red"> 296. 		start_time = time.time()</font>
+<font color="red"> 297. 		while reading:</font>
+<font color="red"> 298. 			(rlist, _, _) = select.select([self.fileno()], [], [], self.timeout)</font>
+<font color="red"> 299. 			if (len(rlist) is 1) and rlist[0] is self.fileno():</font>
+<font color="red"> 300. 				data = self.read(NUM_BYTES_TO_READ)</font>
+<font color="red"> 301. 				bytes_read += len(data)</font>
+<font color="red"> 302. 				self.read_buffer.append((data, (time.time() - start_time)), )</font>
+<font color="black"> 303. 			else:</font>
+<font color="red"> 304. 				reading = False</font>
+<font color="red"> 305. 		if bytes_read is 0:</font>
+<font color="red"> 306. 			return False</font>
+<font color="red"> 307. 		return True</font>
+<font color="black"> 308. </font>
+<font color="red"> 309. 	def thread_get_stop(self):</font>
+<font color="black"> 310. 		# send the read_buffer in the message queue</font>
+<font color="red"> 311. 		if self.msg_queue is not None:</font>
+<font color="red"> 312. 			self.msg_queue.put(</font>
+<font color="black"> 313. 				(</font>
+<font color="black"> 314. 					self.tx_thread.thread_id,</font>
+<font color="black"> 315. 					{SPECIAL_MSG_DATA_KEYS[SPECIAL_MSG__RECEIVED_DATA]: self.read_buffer,},</font>
+<font color="black"> 316. 					REPORT_RECEIVED_DATA,</font>
+<font color="black"> 317. 				))</font>
+<font color="black"> 318. </font>
+<font color="black"> 319. </font>
+<font color="red"> 320. if __name__ == '__main__':</font>
+<font color="red"> 321. 	import tests.testSerialData</font>
+<font color="red"> 322. 	tests.testSerialData.runtests()</font>
+</pre>
+

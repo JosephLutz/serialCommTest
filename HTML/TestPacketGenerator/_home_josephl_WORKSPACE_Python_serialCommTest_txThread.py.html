@@ -1,0 +1,82 @@
+source file: <b>/home/josephl/WORKSPACE/Python/serialCommTest/txThread.py</b><br>
+
+
+file stats: <b>49 lines, 0 executed: 0.0% covered</b>
+<pre>
+<font color="black">   1. # txThread</font>
+<font color="red">   2. import threading</font>
+<font color="black">   3. </font>
+<font color="red">   4. import threadMonitor</font>
+<font color="red">   5. from config import *</font>
+<font color="black">   6. </font>
+<font color="black">   7. </font>
+<font color="red">   8. class TxThread(threadMonitor.ThreadMonitor):</font>
+<font color="black">   9. 	# Thread for running writes from DataSendObj.</font>
+<font color="black">  10. 	# NOTE:</font>
+<font color="black">  11. 	#   DataSendObj.threadStartup() is run before event sync_rxtx_event.</font>
+<font color="black">  12. 	#   Event sync_rxtx_event will be cleared before event thread_event blocks.</font>
+<font color="red">  13. 	def __init__(self, data_send_obj, thread_event=None, *args, **kwargs):</font>
+<font color="red">  14. 		super(TxThread, self).__init__(*args, **kwargs)</font>
+<font color="red">  15. 		self.data_send_obj = data_send_obj</font>
+<font color="red">  16. 		self.data_send_obj.tx_thread = self</font>
+<font color="black">  17. 		# Blocks run until event is set in other thread</font>
+<font color="red">  18. 		self.thread_event = thread_event</font>
+<font color="black">  19. 		# Used to notify when DataSendObj.threadStartup() is completed</font>
+<font color="red">  20. 		if ENABLE_SYNC_RX_TX_THREADS:</font>
+<font color="black">  21. 			# sync RxThread and TxThread</font>
+<font color="red">  22. 			self.sync_rxtx_event = threading.Event()</font>
+<font color="black">  23. 		else:</font>
+<font color="red">  24. 			self.sync_rxtx_event = None</font>
+<font color="red">  25. 		if self.msg_queue:</font>
+<font color="black">  26. 			# notify 'thread created' using msg_queue</font>
+<font color="red">  27. 			self.msg_queue.put((self.thread_id, {'thread_type': 'TX'}, THREAD_CREATED))</font>
+<font color="black">  28. </font>
+<font color="red">  29. 	def locked_running(self):</font>
+<font color="red">  30. 		try:</font>
+<font color="black">  31. 			# thread starting code</font>
+<font color="red">  32. 			self.data_send_obj.thread_send_startup()</font>
+<font color="red">  33. 			if ENABLE_SYNC_RX_TX_THREADS:</font>
+<font color="red">  34. 				if self.msg_queue:</font>
+<font color="black">  35. 					# notify 'RX thread ready' using msg_queue</font>
+<font color="red">  36. 					self.msg_queue.put((self.thread_id, {'thread_type': 'TX'}, THREAD_READY))</font>
+<font color="red">  37. 				if not self.sync_rxtx_event.is_set():</font>
+<font color="red">  38. 					self.sync_rxtx_event.set()</font>
+<font color="black">  39. 			# block until event is set in other thread</font>
+<font color="red">  40. 			if self.thread_event:</font>
+<font color="red">  41. 				if self.msg_queue:</font>
+<font color="black">  42. 					# notify 'thread_event.wait' using msg_queue</font>
+<font color="red">  43. 					self.msg_queue.put((self.thread_id, {'thread_type': 'TX'}, THREAD_SYNC_WAIT))</font>
+<font color="red">  44. 				self.running_lock.release()</font>
+<font color="red">  45. 				self.thread_event.wait()</font>
+<font color="red">  46. 				self.running_lock.acquire()</font>
+<font color="red">  47. 			if self.msg_queue:</font>
+<font color="black">  48. 				# notify 'thread starting' using msg_queue</font>
+<font color="red">  49. 				self.msg_queue.put((self.thread_id, {'thread_type': 'TX'}, THREAD_STARTING))</font>
+<font color="black">  50. 			# anything that needs to happen just before the thread loop starts</font>
+<font color="red">  51. 			self.data_send_obj.thread_send_start()</font>
+<font color="red">  52. 			while self.running:</font>
+<font color="red">  53. 				self.running_lock.release()</font>
+<font color="red">  54. 				if self.data_send_obj.send_data():</font>
+<font color="red">  55. 					self.running_lock.acquire()</font>
+<font color="black">  56. 				else:</font>
+<font color="black">  57. 					# finished reading</font>
+<font color="red">  58. 					self.running_lock.acquire()</font>
+<font color="red">  59. 					self.running = False</font>
+<font color="red">  60. 			self.running_lock.release()</font>
+<font color="black">  61. 			# anything that needs to happen just after the thread loop ends</font>
+<font color="red">  62. 			self.data_send_obj.thread_send_stop()</font>
+<font color="red">  63. 			self.running_lock.acquire()</font>
+<font color="red">  64. 			if self.msg_queue:</font>
+<font color="black">  65. 				# notify 'thread stopped' using msg_queue</font>
+<font color="red">  66. 				self.msg_queue.put((self.thread_id, {'thread_type': 'TX'}, THREAD_STOPPED))</font>
+<font color="red">  67. 		except:</font>
+<font color="red">  68. 			if not self.sync_rxtx_event.is_set():</font>
+<font color="red">  69. 				self.sync_rxtx_event.set()</font>
+<font color="red">  70. 			raise</font>
+<font color="black">  71. </font>
+<font color="black">  72. </font>
+<font color="red">  73. if __name__ == '__main__':</font>
+<font color="red">  74. 	import tests.testTxThread</font>
+<font color="red">  75. 	tests.testTxThread.runtests()</font>
+</pre>
+

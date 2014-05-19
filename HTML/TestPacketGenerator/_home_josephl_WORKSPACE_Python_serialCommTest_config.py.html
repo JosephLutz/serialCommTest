@@ -1,0 +1,161 @@
+source file: <b>/home/josephl/WORKSPACE/Python/serialCommTest/config.py</b><br>
+
+
+file stats: <b>50 lines, 47 executed: 94.0% covered</b>
+<pre>
+<font color="green">   1. import hashlib</font>
+<font color="green">   2. import struct</font>
+<font color="black">   3. </font>
+<font color="black">   4. #</font>
+<font color="black">   5. # Config values for packetGenerator class</font>
+<font color="black">   6. #</font>
+<font color="black">   7. </font>
+<font color="black">   8. # Initial number of packets in the queue</font>
+<font color="green">   9. INITIAL_PACKET_NUMBER = 10</font>
+<font color="black">  10. </font>
+<font color="black">  11. # Wait time before checking the thread is still running</font>
+<font color="green">  12. PACKET_GENERATOR_TIMEOUT = 1.0</font>
+<font color="black">  13. </font>
+<font color="black">  14. # The size of the packets to generate.</font>
+<font color="black">  15. #  random lengths (within constraints) if set to None</font>
+<font color="green">  16. PACKET_SIZE = None</font>
+<font color="black">  17. </font>
+<font color="black">  18. #algorithm used to generate the hash</font>
+<font color="green">  19. PACKET_GENERATOR_HASHLIB_ALGORITHM = hashlib.sha256</font>
+<font color="black">  20. </font>
+<font color="black">  21. #Total number of random bytes generated</font>
+<font color="green">  22. RAND_DATA_SIZE = 10240</font>
+<font color="black">  23. </font>
+<font color="black">  24. #Minimum length of the data in the packet</font>
+<font color="green">  25. MIN_PACKET_DATA_LENGTH = 10</font>
+<font color="black">  26. </font>
+<font color="black">  27. #Length of the largest packet</font>
+<font color="green">  28. MAX_PACKET_LENGTH = 65535</font>
+<font color="black">  29. </font>
+<font color="black">  30. #Max length of the data portion of the packet</font>
+<font color="red">  31. MAX_PACKET_DATA_LENGTH = (</font>
+<font color="green">  32. 	MAX_PACKET_LENGTH -</font>
+<font color="green">  33. 	(PACKET_GENERATOR_HASHLIB_ALGORITHM().digest_size + (len(struct.pack('!H', 0)) * 2)))</font>
+<font color="black">  34. </font>
+<font color="black">  35. #Minimum length of the packet</font>
+<font color="green">  36. MIN_PACKET_LENGTH = (MAX_PACKET_LENGTH - MAX_PACKET_DATA_LENGTH) + MIN_PACKET_DATA_LENGTH</font>
+<font color="black">  37. </font>
+<font color="black">  38. #Largest packet number</font>
+<font color="black">  39. # TODO: need to make the packetID rollover when it reaches this number</font>
+<font color="green">  40. MAX_PACKET_ID = 1024</font>
+<font color="black">  41. </font>
+<font color="black">  42. </font>
+<font color="black">  43. #</font>
+<font color="black">  44. # RxThread and TxThread config values</font>
+<font color="black">  45. #</font>
+<font color="black">  46. </font>
+<font color="green">  47. ENABLE_SYNC_RX_TX_THREADS = True</font>
+<font color="black">  48. </font>
+<font color="black">  49. </font>
+<font color="black">  50. #</font>
+<font color="black">  51. # serialData config values</font>
+<font color="black">  52. #</font>
+<font color="black">  53. </font>
+<font color="black">  54. #Time for read to return when no character is received within this time frame</font>
+<font color="green">  55. SERIAL_PORT_READ_TIMEOUT = 0.02</font>
+<font color="black">  56. </font>
+<font color="black">  57. #number of characters to read at a time</font>
+<font color="green">  58. NUM_BYTES_TO_READ = 512</font>
+<font color="black">  59. </font>
+<font color="black">  60. #use tcdrain to determine when the last character was transmitted</font>
+<font color="green">  61. ENABLE_TCDRAIN = True</font>
+<font color="black">  62. </font>
+<font color="black">  63. #Use the RTS line, SERIAL_PORT_WARMUP_TIME, and SERIAL_PORT_COOLDOWN_TIME</font>
+<font color="green">  64. ENABLE_RTS_LINE = True</font>
+<font color="black">  65. </font>
+<font color="black">  66. #Use the DTR line</font>
+<font color="green">  67. ENABLE_DTR_LINE = True</font>
+<font color="black">  68. </font>
+<font color="black">  69. # amount of time to wait for the Queue to give us the next packet</font>
+<font color="green">  70. SERIAL_PORT_QUEUE_TIME = 3.0</font>
+<font color="black">  71. </font>
+<font color="black">  72. #Time from setting RTS to sending the first character</font>
+<font color="green">  73. SERIAL_PORT_WARMUP_TIME = 0.001</font>
+<font color="black">  74. </font>
+<font color="black">  75. #Time from last character sent to clearing RTS</font>
+<font color="green">  76. SERIAL_PORT_COOLDOWN_TIME = 1.0</font>
+<font color="black">  77. </font>
+<font color="black">  78. </font>
+<font color="black">  79. #</font>
+<font color="black">  80. # threadMonitor configuration</font>
+<font color="black">  81. #</font>
+<font color="black">  82. </font>
+<font color="green">  83. START_THREAD_ID = 1</font>
+<font color="black">  84. # MAX_THREAD_ID = 65535</font>
+<font color="green">  85. MAX_THREAD_ID = 65</font>
+<font color="black">  86. </font>
+<font color="black">  87. </font>
+<font color="black">  88. #</font>
+<font color="black">  89. # msgMonitor configuration</font>
+<font color="black">  90. #</font>
+<font color="black">  91. </font>
+<font color="black">  92. </font>
+<font color="black">  93. #</font>
+<font color="black">  94. # msgMonitor values</font>
+<font color="black">  95. #</font>
+<font color="black">  96. </font>
+<font color="black">  97. # Special keys used to transfer other data (in msgQueue), than string</font>
+<font color="black">  98. # formatting arguments.</font>
+<font color="red">  99. SPECIAL_MSG_DATA_KEYS = (</font>
+<font color="black"> 100. 	# list of sent packets</font>
+<font color="black"> 101. 	#     [(packetID, packetLength, hash), ...]</font>
+<font color="black"> 102. 	'SENT_DATA',</font>
+<font color="black"> 103. 	# data received (list of tuples, each containing data read and time since last read)</font>
+<font color="black"> 104. 	#     [(data, time), ...]</font>
+<font color="green"> 105. 	'RECEIVED_DATA',)</font>
+<font color="black"> 106. # descriptive index number to SPECIAL_MSG_DATA_KEYS</font>
+<font color="green"> 107. SPECIAL_MSG__SENT_DATA, SPECIAL_MSG__RECEIVED_DATA = (0, 1)</font>
+<font color="black"> 108. </font>
+<font color="black"> 109. </font>
+<font color="black"> 110. # common thread messages. Use messageQueueMessages with these keys to reference</font>
+<font color="black"> 111. # the common message.</font>
+<font color="red"> 112. (</font>
+<font color="black"> 113. 	THREAD_CREATED,</font>
+<font color="black"> 114. 	THREAD_READY,</font>
+<font color="black"> 115. 	THREAD_SYNC_WAIT,</font>
+<font color="black"> 116. 	THREAD_STARTING,</font>
+<font color="black"> 117. 	THREAD_STOPPED,</font>
+<font color="black"> 118. 	GENERATE_DATA,</font>
+<font color="black"> 119. 	CREATE_SERIAL_PORT,</font>
+<font color="black"> 120. 	SERIAL_PORT_OPENED,</font>
+<font color="black"> 121. 	SERIAL_PORT_CLOSED,</font>
+<font color="black"> 122. 	PORT_NOT_EXIST,</font>
+<font color="black"> 123. 	SERIALEXCEPTION_OPEN_DISAPPEAR,</font>
+<font color="black"> 124. 	SERIALEXCEPTION_OPEN,</font>
+<font color="black"> 125. 	PORT_NOT_OPEN,</font>
+<font color="black"> 126. 	START_PACKET,</font>
+<font color="black"> 127. 	FINISH_PACKET,</font>
+<font color="black"> 128. 	SERIAL_TIMEOUT,</font>
+<font color="black"> 129. 	REPORT_SENT_DATA,</font>
+<font color="green"> 130. 	REPORT_RECEIVED_DATA,) = xrange(18)</font>
+<font color="black"> 131. # message Queue text for the messages</font>
+<font color="green"> 132. messageQueueMessages = {</font>
+<font color="black"> 133. 	# rxThread and tx_thread</font>
+<font color="green"> 134. 	THREAD_CREATED: u'{thread_type} THREAD CREATED',</font>
+<font color="green"> 135. 	THREAD_READY: u'{thread_type} THREAD READY',</font>
+<font color="green"> 136. 	THREAD_SYNC_WAIT: u'{thread_type} THREAD SYNC WAIT',</font>
+<font color="green"> 137. 	THREAD_STARTING: u'{thread_type} THREAD STARTING',</font>
+<font color="green"> 138. 	THREAD_STOPPED: u'{thread_type} THREAD STOPPED',  # packetGenerator</font>
+<font color="green"> 139. 	GENERATE_DATA: u'Generating {num_rand_bytes} bytes of random data for packet data',</font>
+<font color="black"> 140. 	#serialData</font>
+<font color="green"> 141. 	CREATE_SERIAL_PORT: u'Created serial port {port}',</font>
+<font color="green"> 142. 	SERIAL_PORT_OPENED: u'Serial port {port} opened',</font>
+<font color="green"> 143. 	SERIAL_PORT_CLOSED: u'Serial port {port} closed',</font>
+<font color="green"> 144. 	PORT_NOT_EXIST: u'Serial port {port} does not exist.',</font>
+<font color="black"> 145. 	SERIALEXCEPTION_OPEN_DISAPPEAR: (</font>
+<font color="green"> 146. 		u'SerialException while opening port {port}, ' +</font>
+<font color="green"> 147. 		u'and the port disappeared after open attempt.'),</font>
+<font color="green"> 148. 	SERIALEXCEPTION_OPEN: u'SerialException while opening port {port}.',</font>
+<font color="green"> 149. 	PORT_NOT_OPEN: u'Serial port {port} would not open with specified port configuration.',</font>
+<font color="green"> 150. 	START_PACKET: u'Started TX on {packetLength} byte packet {packetID} @ {time}',</font>
+<font color="green"> 151. 	FINISH_PACKET: u'Finished TX on {packetLength} byte packet {packetID} @ {time}',</font>
+<font color="green"> 152. 	SERIAL_TIMEOUT: u'SerialTimeoutException during packet write',</font>
+<font color="green"> 153. 	REPORT_SENT_DATA: u'Data received',</font>
+<font color="green"> 154. 	REPORT_RECEIVED_DATA: u'Data read before timeout.', }</font>
+</pre>
+

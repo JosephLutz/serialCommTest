@@ -1,0 +1,183 @@
+source file: <b>/home/josephl/WORKSPACE/Python/serialCommTest/packetGenerator.py</b><br>
+
+
+file stats: <b>91 lines, 72 executed: 79.1% covered</b>
+<pre>
+<font color="black">   1. # packetGenerator</font>
+<font color="green">   2. import threading</font>
+<font color="green">   3. import random</font>
+<font color="green">   4. import Queue</font>
+<font color="green">   5. import time</font>
+<font color="black">   6. </font>
+<font color="green">   7. import threadMonitor</font>
+<font color="green">   8. from config import *</font>
+<font color="black">   9. </font>
+<font color="black">  10. </font>
+<font color="green">  11. class PacketGeneratorException(BaseException):</font>
+<font color="green">  12. 	&quot;&quot;&quot;Exceptions originating in the PacketGenerator&quot;&quot;&quot;</font>
+<font color="black">  13. </font>
+<font color="black">  14. </font>
+<font color="green">  15. class PacketGenerator(threadMonitor.ThreadMonitor):</font>
+<font color="black">  16. 	# Generates the information for a packet</font>
+<font color="black">  17. 	#</font>
+<font color="black">  18. 	# This thread should be started before any TxThreads and</font>
+<font color="black">  19. 	# should be terminated only after all TxThreads have been joined.</font>
+<font color="black">  20. 	#</font>
+<font color="black">  21. 	# A packet is a byte string containing:</font>
+<font color="black">  22. 	#   1.)  packetID:     (0  to  65535)</font>
+<font color="black">  23. 	#   2.)  packetLen:    (MIN_PACKET_LENGTH  to  MAX_PACKET_LENGTH) a number less than 65535</font>
+<font color="black">  24. 	#   3.)  data:         (MIN_PACKET_DATA_LENGTH  to  MAX_PACKET_DATA_LENGTH) number of bytes</font>
+<font color="black">  25. 	#   4.)  data_hash:    (PACKET_GENERATOR_HASHLIB_ALGORITHM().digest_size) number of bytes</font>
+<font color="black">  26. 	# The data stored in the queue is a tuple containing:</font>
+<font color="black">  27. 	#   1.)  packet:       The above format of packet</font>
+<font color="black">  28. 	#   2.)  packetID:     Same value as in the packet</font>
+<font color="black">  29. 	#   3.)  packetLen:    Same value as in the packet</font>
+<font color="black">  30. 	#   4.)  data_hash:    Hex representation of the data_hash above</font>
+<font color="black">  31. </font>
+<font color="black">  32. 	#Lock used to access and updated static data in PacketGenerator objects</font>
+<font color="green">  33. 	allocated_lock = threading.Lock()</font>
+<font color="black">  34. </font>
+<font color="black">  35. 	# the allocated packetIDs</font>
+<font color="green">  36. 	allocated = set()</font>
+<font color="black">  37. </font>
+<font color="black">  38. 	#The total available packetIDs</font>
+<font color="green">  39. 	ALLOCATABLE_PACKET_ID = set(xrange(MAX_PACKET_ID))</font>
+<font color="black">  40. </font>
+<font color="black">  41. 	#Hashable value that will seed the random number generator</font>
+<font color="green">  42. 	_RANDOM_SEED = '{time}{len}'.format(time=time.time(), len=len(allocated))</font>
+<font color="black">  43. </font>
+<font color="green">  44. 	def __init__(self, max_queue_size=INITIAL_PACKET_NUMBER, num_rand_bytes=RAND_DATA_SIZE,</font>
+<font color="green">  45. 			printable_chars=False, seed=None, *args, **kwargs):</font>
+<font color="black">  46. 		&quot;&quot;&quot;</font>
+<font color="black">  47. 		init method for PacketGenerator thread</font>
+<font color="black">  48. </font>
+<font color="black">  49. 		:type self: threadMonitor.ThreadMonitor</font>
+<font color="black">  50. 		:param max_queue_size: The size to use when creating packets. Try and keep at least this many packets.</font>
+<font color="black">  51. 		:param num_rand_bytes: number of random bytes to generate (Larger is better. Only one time when assembling data)</font>
+<font color="black">  52. 		:param printable_chars: True if only printable characters desired</font>
+<font color="black">  53. 		:param seed: customize the random seed</font>
+<font color="black">  54. 		&quot;&quot;&quot;</font>
+<font color="green">  55. 		super(PacketGenerator, self).__init__(*args, **kwargs)</font>
+<font color="green">  56. 		if max_queue_size &gt; MAX_PACKET_ID:</font>
+<font color="red">  57. 			raise PacketGeneratorException</font>
+<font color="green">  58. 		if num_rand_bytes &gt; (</font>
+<font color="green">  59. 				(len(struct.pack('!H', 0)) * 2) + MAX_PACKET_DATA_LENGTH +</font>
+<font color="green">  60. 				PACKET_GENERATOR_HASHLIB_ALGORITHM().digest_size):</font>
+<font color="red">  61. 			raise PacketGeneratorException</font>
+<font color="black">  62. 		# seed and init random numbers</font>
+<font color="green">  63. 		if seed is None:</font>
+<font color="red">  64. 			seed = PacketGenerator._RANDOM_SEED</font>
+<font color="green">  65. 		self._rand = random.SystemRandom(seed)</font>
+<font color="black">  66. 		# the next index of self._random_data to start gathering the data for the next packet</font>
+<font color="green">  67. 		self._start_index = 0</font>
+<font color="black">  68. 		# random data used for for sending</font>
+<font color="green">  69. 		if printable_chars:</font>
+<font color="green">  70. 			self._random_data = ''.join([chr(self._rand.randint(33, 126)) for _ in xrange(num_rand_bytes)])</font>
+<font color="black">  71. 		else:</font>
+<font color="red">  72. 			self._random_data = ''.join([chr(self._rand.randint(1, 255)) for _ in xrange(num_rand_bytes)])</font>
+<font color="black">  73. 		# the length of the packet to create</font>
+<font color="green">  74. 		self._packet_length = PACKET_SIZE</font>
+<font color="green">  75. 		self._packet_length_lock = threading.Lock()</font>
+<font color="black">  76. 		# Queue that holds each packet</font>
+<font color="green">  77. 		self.queue = Queue.Queue(maxsize=max_queue_size)</font>
+<font color="green">  78. 		if self.msg_queue:</font>
+<font color="green">  79. 			self.msg_queue.put((None, {'num_rand_bytes': num_rand_bytes}, GENERATE_DATA))</font>
+<font color="black">  80. </font>
+<font color="green">  81. 	def change_packet_length(self, packet_length=PACKET_SIZE):</font>
+<font color="black">  82. 		&quot;&quot;&quot;</font>
+<font color="black">  83. 		If the packet length is set to None then a random length is used</font>
+<font color="black">  84. 		Packet length must be greater than MIN_PACKET_DATA_LENGTH and</font>
+<font color="black">  85. 		less than MAX_PACKET_DATA_LENGTH. MAX_PACKET_DATA_LENGTH is calculated</font>
+<font color="black">  86. 		based off MAX_PACKET_LENGTH, PACKET_GENERATOR_HASHLIB_ALGORITHM's</font>
+<font color="black">  87. 		digest size, 2 bytes used for a length of the packet data and 2 bytes</font>
+<font color="black">  88. 		used for the packetID.</font>
+<font color="black">  89. </font>
+<font color="black">  90. 		:param packet_length: The length of the packets to be created</font>
+<font color="black">  91. 		&quot;&quot;&quot;</font>
+<font color="red">  92. 		if ((packet_length &gt; MAX_PACKET_LENGTH) or</font>
+<font color="black">  93. 				(packet_length &lt; MIN_PACKET_LENGTH)):</font>
+<font color="red">  94. 			raise PacketGeneratorException</font>
+<font color="red">  95. 		self._packet_length_lock.acquire()</font>
+<font color="red">  96. 		self._packet_length = packet_length</font>
+<font color="red">  97. 		self._packet_length_lock.release()</font>
+<font color="black">  98. </font>
+<font color="green">  99. 	def locked_running(self):</font>
+<font color="green"> 100. 		try:</font>
+<font color="green"> 101. 			next_packet = None</font>
+<font color="green"> 102. 			while self.running:</font>
+<font color="green"> 103. 				self.running_lock.release()</font>
+<font color="green"> 104. 				if next_packet is None:</font>
+<font color="green"> 105. 					next_packet = self.make_packet()</font>
+<font color="green"> 106. 				try:</font>
+<font color="green"> 107. 					self.queue.put(next_packet, True, PACKET_GENERATOR_TIMEOUT)</font>
+<font color="green"> 108. 				except Queue.Full:</font>
+<font color="green"> 109. 					pass</font>
+<font color="black"> 110. 				else:</font>
+<font color="green"> 111. 					next_packet = None</font>
+<font color="green"> 112. 				self.running_lock.acquire()</font>
+<font color="red"> 113. 		except:</font>
+<font color="red"> 114. 			if self._packet_length_lock.locked():</font>
+<font color="red"> 115. 				self._packet_length_lock.release()</font>
+<font color="red"> 116. 			if PacketGenerator.allocated_lock.locked():</font>
+<font color="red"> 117. 				self._packet_length_lock.release()</font>
+<font color="red"> 118. 			raise</font>
+<font color="black"> 119. 		finally:</font>
+<font color="black"> 120. 			# empty out the packet queue</font>
+<font color="green"> 121. 			try:</font>
+<font color="black"> 122. 				# loop until Queue.Empty exception is thrown</font>
+<font color="green"> 123. 				while True:</font>
+<font color="green"> 124. 					self.queue.get_nowait()</font>
+<font color="green"> 125. 			except Queue.Empty:</font>
+<font color="green"> 126. 				pass</font>
+<font color="black"> 127. </font>
+<font color="green"> 128. 	def make_packet(self):</font>
+<font color="black"> 129. 		&quot;&quot;&quot;</font>
+<font color="black"> 130. 		Generates the packets of random data</font>
+<font color="black"> 131. </font>
+<font color="black"> 132. 		The random data will be used for the packet_data.</font>
+<font color="black"> 133. 		Loop through the random data until packet_data is fully populated.</font>
+<font color="black"> 134. 		&quot;&quot;&quot;</font>
+<font color="black"> 135. 		# determine packet_len</font>
+<font color="green"> 136. 		self._packet_length_lock.acquire()</font>
+<font color="green"> 137. 		if self._packet_length is None:</font>
+<font color="red"> 138. 			local_packet_length = (</font>
+<font color="black"> 139. 				(len(struct.pack('!H', 0)) * 2) +</font>
+<font color="green"> 140. 				self._rand.randint(MIN_PACKET_DATA_LENGTH, MAX_PACKET_DATA_LENGTH) +</font>
+<font color="green"> 141. 				PACKET_GENERATOR_HASHLIB_ALGORITHM().digest_size)</font>
+<font color="black"> 142. 		else:</font>
+<font color="red"> 143. 			local_packet_length = self._packet_length</font>
+<font color="green"> 144. 		self._packet_length_lock.release()</font>
+<font color="black"> 145. 		# assemble the packet_data from</font>
+<font color="green"> 146. 		packet_data = ''</font>
+<font color="green"> 147. 		data_hash = PACKET_GENERATOR_HASHLIB_ALGORITHM()</font>
+<font color="green"> 148. 		data_len = local_packet_length - (len(struct.pack('!H', 0)) * 2) - data_hash.digest_size</font>
+<font color="green"> 149. 		while len(packet_data) &lt; data_len:</font>
+<font color="black"> 150. 			# end_index is the smaller of, the length of self._random_data, or</font>
+<font color="black"> 151. 			#  self._start_index plus the number of bytes still needed for the packet_data.</font>
+<font color="green"> 152. 			end_index = min(len(self._random_data), self._start_index + (data_len - len(packet_data)))</font>
+<font color="black"> 153. 			# copy data from self._random_data, starting at self._start_index and</font>
+<font color="black"> 154. 			# ending at end_index, to packet_data.</font>
+<font color="green"> 155. 			packet_data += self._random_data[self._start_index:end_index]</font>
+<font color="black"> 156. 			# add the data to the hash calculation</font>
+<font color="green"> 157. 			data_hash.update(self._random_data[self._start_index:end_index])</font>
+<font color="black"> 158. 			# calculate self._start_index for next time around</font>
+<font color="green"> 159. 			self._start_index = end_index + 1</font>
+<font color="green"> 160. 			if self._start_index &gt; len(self._random_data):</font>
+<font color="green"> 161. 				self._start_index = 0</font>
+<font color="black"> 162. 		# get the next packet_id</font>
+<font color="green"> 163. 		PacketGenerator.allocated_lock.acquire()</font>
+<font color="green"> 164. 		packet_id = self._rand.choice(list(PacketGenerator.ALLOCATABLE_PACKET_ID - PacketGenerator.allocated))</font>
+<font color="black"> 165. 		# Set packetID as used</font>
+<font color="green"> 166. 		PacketGenerator.allocated.add(packet_id)</font>
+<font color="green"> 167. 		PacketGenerator.allocated_lock.release()</font>
+<font color="black"> 168. 		# assemble the packet</font>
+<font color="green"> 169. 		packet = struct.pack('!H', packet_id) + struct.pack('!H', local_packet_length) + packet_data + data_hash.digest()</font>
+<font color="black"> 170. 		# place the information into the Queue</font>
+<font color="green"> 171. 		return packet, packet_id, local_packet_length, data_hash.hexdigest(),</font>
+<font color="black"> 172. </font>
+<font color="black"> 173. </font>
+<font color="green"> 174. if __name__ == '__main__':</font>
+<font color="red"> 175. 	import tests.testPacketGenerator</font>
+<font color="red"> 176. 	tests.testPacketGenerator.runtests()</font>
+</pre>
+

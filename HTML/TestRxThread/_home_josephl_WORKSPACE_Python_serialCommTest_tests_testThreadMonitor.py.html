@@ -1,0 +1,261 @@
+source file: <b>/home/josephl/WORKSPACE/Python/serialCommTest/tests/testThreadMonitor.py</b><br>
+
+
+file stats: <b>187 lines, 0 executed: 0.0% covered</b>
+<pre>
+<font color="black">   1. # msgMonitor_test</font>
+<font color="black">   2. </font>
+<font color="red">   3. import threading</font>
+<font color="red">   4. import unittest</font>
+<font color="red">   5. import Queue</font>
+<font color="red">   6. import time</font>
+<font color="black">   7. </font>
+<font color="red">   8. if __name__ == '__main__':</font>
+<font color="red">   9. 	import os</font>
+<font color="red">  10. 	import sys</font>
+<font color="black">  11. </font>
+<font color="red">  12. 	importDirectory = os.getcwd()</font>
+<font color="red">  13. 	if os.path.basename(importDirectory) in ['tests']:</font>
+<font color="red">  14. 		importDirectory = os.path.dirname(importDirectory)</font>
+<font color="red">  15. 	sys.path = [importDirectory] + sys.path</font>
+<font color="black">  16. </font>
+<font color="red">  17. import threadMonitor</font>
+<font color="red">  18. from config import *</font>
+<font color="black">  19. </font>
+<font color="black">  20. </font>
+<font color="red">  21. class TestThread(threadMonitor.ThreadMonitor):</font>
+<font color="red">  22. 	def __init__(self, *args, **kwargs):</font>
+<font color="red">  23. 		super(TestThread, self).__init__(*args, **kwargs)</font>
+<font color="red">  24. 		self.work_started = False</font>
+<font color="red">  25. 		self.work_ended = False</font>
+<font color="red">  26. 		self.thread_exception = False</font>
+<font color="red">  27. 		self.thread_exception_running_lock = False</font>
+<font color="red">  28. 		self.thread_state_lock = threading.Lock()</font>
+<font color="red">  29. 		self.exception_encountered = None</font>
+<font color="black">  30. </font>
+<font color="red">  31. 	def locked_running(self):</font>
+<font color="red">  32. 		try:</font>
+<font color="red">  33. 			self.thread_state_lock.acquire()</font>
+<font color="red">  34. 			self.work_started = True</font>
+<font color="red">  35. 			self.thread_state_lock.release()</font>
+<font color="red">  36. 			while self.running:</font>
+<font color="red">  37. 				self.running_lock.release()</font>
+<font color="red">  38. 				time.sleep(0.05)</font>
+<font color="red">  39. 				self.thread_state_lock.acquire()</font>
+<font color="red">  40. 				if self.thread_exception:</font>
+<font color="red">  41. 					if self.thread_exception_running_lock:</font>
+<font color="red">  42. 						self.running_lock.acquire()</font>
+<font color="red">  43. 					self.thread_state_lock.release()</font>
+<font color="red">  44. 					raise BaseException</font>
+<font color="red">  45. 				self.thread_state_lock.release()</font>
+<font color="red">  46. 				self.running_lock.acquire()</font>
+<font color="red">  47. 		except BaseException:</font>
+<font color="red">  48. 			self.exception_encountered = True</font>
+<font color="black">  49. 			# catch exception and perform any cleanup needed</font>
+<font color="red">  50. 			if self.thread_state_lock.locked():</font>
+<font color="red">  51. 				self.thread_state_lock.release()</font>
+<font color="red">  52. 			raise</font>
+<font color="black">  53. 		else:</font>
+<font color="red">  54. 			self.exception_encountered = False</font>
+<font color="black">  55. 		finally:</font>
+<font color="red">  56. 			self.thread_state_lock.acquire()</font>
+<font color="red">  57. 			self.work_ended = True</font>
+<font color="red">  58. 			self.thread_state_lock.release()</font>
+<font color="black">  59. </font>
+<font color="black">  60. </font>
+<font color="red">  61. class TestThreadMonitor(unittest.TestCase):</font>
+<font color="red">  62. 	def setUp(self):</font>
+<font color="red">  63. 		threadMonitor.ThreadMonitor.threadMapLock.acquire()</font>
+<font color="red">  64. 		threadMonitor.ThreadMonitor.threadMap = {}</font>
+<font color="red">  65. 		threadMonitor.ThreadMonitor.threadMapLock.release()</font>
+<font color="red">  66. 		threadMonitor.ThreadMonitor.threadMapLock = threading.Lock()</font>
+<font color="red">  67. 		threadMonitor.ThreadMonitor.msg_queue = Queue.Queue()</font>
+<font color="black">  68. </font>
+<font color="red">  69. 	def test_object_creation(self):</font>
+<font color="black">  70. 		# no threads</font>
+<font color="red">  71. 		self.assertTrue(len(threadMonitor.ThreadMonitor.threadMap) is 0)</font>
+<font color="black">  72. 		# first thread</font>
+<font color="red">  73. 		t = threadMonitor.ThreadMonitor()</font>
+<font color="red">  74. 		self.assertTrue(isinstance(t, threadMonitor.ThreadMonitor))</font>
+<font color="red">  75. 		self.assertTrue(len(threadMonitor.ThreadMonitor.threadMap) is 1)</font>
+<font color="red">  76. 		self.assertTrue(isinstance(t.thread_id, int))</font>
+<font color="red">  77. 		self.assertTrue(START_THREAD_ID &lt;= t.thread_id &lt; MAX_THREAD_ID)</font>
+<font color="red">  78. 		self.assertTrue(threadMonitor.ThreadMonitor.threadMap[t.thread_id] is t)</font>
+<font color="black">  79. 		# second thread</font>
+<font color="red">  80. 		t = TestThread()</font>
+<font color="red">  81. 		self.assertTrue(isinstance(t, TestThread))</font>
+<font color="red">  82. 		self.assertTrue(len(threadMonitor.ThreadMonitor.threadMap) is 2)</font>
+<font color="red">  83. 		self.assertTrue(isinstance(t.thread_id, int))</font>
+<font color="red">  84. 		self.assertTrue(START_THREAD_ID &lt;= t.thread_id &lt; MAX_THREAD_ID)</font>
+<font color="red">  85. 		self.assertTrue(threadMonitor.ThreadMonitor.threadMap[t.thread_id] is t)</font>
+<font color="black">  86. 		# create over MAX_THREAD_ID number of threads</font>
+<font color="red">  87. 		try:</font>
+<font color="red">  88. 			for count in xrange(START_THREAD_ID, MAX_THREAD_ID + 1):</font>
+<font color="red">  89. 				t = TestThread()</font>
+<font color="red">  90. 				self.assertTrue(isinstance(t, TestThread))</font>
+<font color="red">  91. 				self.assertTrue(isinstance(t.thread_id, int))</font>
+<font color="red">  92. 				self.assertTrue(START_THREAD_ID &lt;= t.thread_id &lt; MAX_THREAD_ID)</font>
+<font color="red">  93. 				self.assertTrue(threadMonitor.ThreadMonitor.threadMap[t.thread_id] is t)</font>
+<font color="red">  94. 		except threadMonitor.ThreadMonitorException:</font>
+<font color="red">  95. 			self.assertTrue(True)</font>
+<font color="black">  96. 		else:</font>
+<font color="red">  97. 			self.assertTrue(False)</font>
+<font color="black">  98. </font>
+<font color="red">  99. 	def _create_thread(self, *args, **kwargs):</font>
+<font color="black"> 100. 		# create the thread</font>
+<font color="red"> 101. 		t = TestThread(*args, **kwargs)</font>
+<font color="red"> 102. 		t.thread_state_lock.acquire()</font>
+<font color="red"> 103. 		self.assertFalse(t.work_started)</font>
+<font color="red"> 104. 		self.assertFalse(t.work_ended)</font>
+<font color="red"> 105. 		t.thread_state_lock.release()</font>
+<font color="red"> 106. 		t.running_lock.acquire()</font>
+<font color="red"> 107. 		self.assertFalse(t.running)</font>
+<font color="red"> 108. 		t.running_lock.release()</font>
+<font color="red"> 109. 		return t</font>
+<font color="black"> 110. </font>
+<font color="red"> 111. 	def _thread_running_state(self, t):</font>
+<font color="black"> 112. 		# check state now</font>
+<font color="red"> 113. 		t.thread_state_lock.acquire()</font>
+<font color="red"> 114. 		self.assertTrue(t.work_started)</font>
+<font color="red"> 115. 		self.assertFalse(t.work_ended)</font>
+<font color="red"> 116. 		t.thread_state_lock.release()</font>
+<font color="red"> 117. 		t.running_lock.acquire()</font>
+<font color="red"> 118. 		self.assertTrue(t.running)</font>
+<font color="red"> 119. 		t.running_lock.release()</font>
+<font color="black"> 120. </font>
+<font color="red"> 121. 	def _thread_final_state(self, t):</font>
+<font color="black"> 122. 		# check final state</font>
+<font color="red"> 123. 		t.thread_state_lock.acquire()</font>
+<font color="red"> 124. 		self.assertTrue(t.work_started)</font>
+<font color="red"> 125. 		self.assertTrue(t.work_ended)</font>
+<font color="red"> 126. 		t.thread_state_lock.release()</font>
+<font color="red"> 127. 		t.running_lock.acquire()</font>
+<font color="red"> 128. 		self.assertFalse(t.running)</font>
+<font color="red"> 129. 		t.running_lock.release()</font>
+<font color="black"> 130. </font>
+<font color="red"> 131. 	def test_run(self):</font>
+<font color="red"> 132. 		t = self._create_thread()</font>
+<font color="black"> 133. 		# start the thread</font>
+<font color="red"> 134. 		t.start()</font>
+<font color="black"> 135. 		# allow a context switch</font>
+<font color="red"> 136. 		time.sleep(0.01)</font>
+<font color="red"> 137. 		self._thread_running_state(t)</font>
+<font color="black"> 138. 		# set to stop running</font>
+<font color="red"> 139. 		t.running_lock.acquire()</font>
+<font color="red"> 140. 		t.running = False</font>
+<font color="red"> 141. 		t.running_lock.release()</font>
+<font color="black"> 142. 		# allow a context switch and wait for thread to terminate</font>
+<font color="red"> 143. 		time.sleep(0.1)</font>
+<font color="red"> 144. 		self._thread_final_state(t)</font>
+<font color="black"> 145. </font>
+<font color="red"> 146. 	def test_exception_in_run(self):</font>
+<font color="black"> 147. 		# iterate over each state of the running_lock for the new thread</font>
+<font color="red"> 148. 		for running_lock_state in [True, False]:</font>
+<font color="red"> 149. 			t = self._create_thread(name='!!! EXPECTING EXCEPTION !!! running_lock_state={0}'.format(running_lock_state))</font>
+<font color="black"> 150. 			# start the thread</font>
+<font color="red"> 151. 			t.start()</font>
+<font color="black"> 152. 			# allow a context switch</font>
+<font color="red"> 153. 			time.sleep(0.01)</font>
+<font color="red"> 154. 			self._thread_running_state(t)</font>
+<font color="black"> 155. 			# tell thread to throw exception with running_lock set to running_lock_state</font>
+<font color="black"> 156. 			#try:</font>
+<font color="red"> 157. 			t.thread_state_lock.acquire()</font>
+<font color="red"> 158. 			t.thread_exception = True</font>
+<font color="red"> 159. 			t.thread_exception_running_lock = running_lock_state</font>
+<font color="red"> 160. 			t.thread_state_lock.release()</font>
+<font color="black"> 161. 			# allow a context switch and wait for thread to terminate</font>
+<font color="red"> 162. 			t.join()</font>
+<font color="red"> 163. 			if t.exception_encountered is None:</font>
+<font color="red"> 164. 				self.assertTrue(False)</font>
+<font color="red"> 165. 			elif t.exception_encountered:</font>
+<font color="red"> 166. 				self.assertTrue(True)</font>
+<font color="black"> 167. 			else:</font>
+<font color="red"> 168. 				self.assertTrue(False)</font>
+<font color="red"> 169. 			self._thread_final_state(t)</font>
+<font color="black"> 170. </font>
+<font color="red"> 171. 	def test_join(self):</font>
+<font color="red"> 172. 		t = self._create_thread()</font>
+<font color="black"> 173. 		# start the thread</font>
+<font color="red"> 174. 		t.start()</font>
+<font color="black"> 175. 		# allow a context switch</font>
+<font color="red"> 176. 		time.sleep(0.01)</font>
+<font color="red"> 177. 		self._thread_running_state(t)</font>
+<font color="black"> 178. 		# join the thread</font>
+<font color="red"> 179. 		t.join()</font>
+<font color="red"> 180. 		self._thread_final_state(t)</font>
+<font color="black"> 181. </font>
+<font color="red"> 182. 	def _common_multithread_test(self, num_threads, term_thread_index):</font>
+<font color="black"> 183. 		# self check</font>
+<font color="red"> 184. 		self.assertTrue(num_threads &gt;= term_thread_index)</font>
+<font color="black"> 185. 		# create three threads</font>
+<font color="red"> 186. 		thread_list = []</font>
+<font color="red"> 187. 		for _ in xrange(num_threads):</font>
+<font color="red"> 188. 			thread_list.append(self._create_thread())</font>
+<font color="black"> 189. 		# check the number of assigned thread_ids is same as number of threads</font>
+<font color="red"> 190. 		threadMonitor.ThreadMonitor.threadMapLock.acquire()</font>
+<font color="red"> 191. 		self.assertTrue(len(threadMonitor.ThreadMonitor.threadMap) is len(thread_list))</font>
+<font color="red"> 192. 		threadMonitor.ThreadMonitor.threadMapLock.release()</font>
+<font color="black"> 193. 		# start the threads</font>
+<font color="red"> 194. 		for t in thread_list:</font>
+<font color="red"> 195. 			t.start()</font>
+<font color="black"> 196. 		# allow a context switch</font>
+<font color="red"> 197. 		time.sleep(0.01)</font>
+<font color="black"> 198. 		# check state now</font>
+<font color="red"> 199. 		for t in thread_list:</font>
+<font color="red"> 200. 			self._thread_running_state(t)</font>
+<font color="black"> 201. 		# terminate the term_thread_index thread and wait for it to be joined</font>
+<font color="red"> 202. 		thread_list[term_thread_index].running_lock.acquire()</font>
+<font color="red"> 203. 		thread_list[term_thread_index].running = False</font>
+<font color="red"> 204. 		thread_list[term_thread_index].running_lock.release()</font>
+<font color="red"> 205. 		thread_list[term_thread_index].join()</font>
+<font color="black"> 206. 		# check the number of assigned thread_ids is same as number of threads</font>
+<font color="red"> 207. 		threadMonitor.ThreadMonitor.threadMapLock.acquire()</font>
+<font color="red"> 208. 		self.assertTrue(len(threadMonitor.ThreadMonitor.threadMap) is len(thread_list))</font>
+<font color="black"> 209. 		# and check that the threadMap for the thread_id is set to None</font>
+<font color="red"> 210. 		self.assertTrue(threadMonitor.ThreadMonitor.threadMap[thread_list[term_thread_index].thread_id] is None)</font>
+<font color="red"> 211. 		threadMonitor.ThreadMonitor.threadMapLock.release()</font>
+<font color="black"> 212. 		# check the state of the three threads</font>
+<font color="black"> 213. 		#  running Threads</font>
+<font color="red"> 214. 		for t in thread_list[:term_thread_index] + thread_list[(term_thread_index + 1):]:</font>
+<font color="red"> 215. 			self._thread_running_state(t)</font>
+<font color="black"> 216. 		#  terminated Thread</font>
+<font color="red"> 217. 		thread_list[term_thread_index].thread_state_lock.acquire()</font>
+<font color="red"> 218. 		self.assertTrue(thread_list[term_thread_index].work_started)</font>
+<font color="red"> 219. 		self.assertTrue(thread_list[term_thread_index].work_ended)</font>
+<font color="red"> 220. 		thread_list[term_thread_index].thread_state_lock.release()</font>
+<font color="red"> 221. 		thread_list[term_thread_index].running_lock.acquire()</font>
+<font color="red"> 222. 		self.assertFalse(thread_list[term_thread_index].running)</font>
+<font color="red"> 223. 		thread_list[term_thread_index].running_lock.release()</font>
+<font color="red"> 224. 		return thread_list</font>
+<font color="black"> 225. </font>
+<font color="red"> 226. 	def test_join_all(self):</font>
+<font color="red"> 227. 		thread_list = self._common_multithread_test(num_threads=3, term_thread_index=1)</font>
+<font color="black"> 228. 		# join all threads</font>
+<font color="red"> 229. 		threadMonitor.ThreadMonitor.join_all()</font>
+<font color="black"> 230. 		# check final state</font>
+<font color="red"> 231. 		for t in thread_list:</font>
+<font color="red"> 232. 			self._thread_final_state(t)</font>
+<font color="black"> 233. </font>
+<font color="red"> 234. 	def test_clean_terminated(self):</font>
+<font color="red"> 235. 		term_thread_index = 1</font>
+<font color="red"> 236. 		thread_list = self._common_multithread_test(num_threads=3, term_thread_index=term_thread_index)</font>
+<font color="black"> 237. 		# clean up the terminated thread_ids</font>
+<font color="red"> 238. 		threadMonitor.ThreadMonitor.clean_terminated()</font>
+<font color="black"> 239. 		# check the number of assigned thread_ids is same as number of threads minus 1</font>
+<font color="red"> 240. 		threadMonitor.ThreadMonitor.threadMapLock.acquire()</font>
+<font color="red"> 241. 		self.assertTrue(len(threadMonitor.ThreadMonitor.threadMap) is (len(thread_list) - 1))</font>
+<font color="black"> 242. 		# and check that the threadMap for the thread_id no longer exists</font>
+<font color="red"> 243. 		self.assertFalse(thread_list[term_thread_index].thread_id in threadMonitor.ThreadMonitor.threadMap)</font>
+<font color="red"> 244. 		threadMonitor.ThreadMonitor.threadMapLock.release()</font>
+<font color="black"> 245. 		# join all threads to cleanup</font>
+<font color="red"> 246. 		threadMonitor.ThreadMonitor.join_all()</font>
+<font color="black"> 247. </font>
+<font color="black"> 248. </font>
+<font color="red"> 249. def runtests():</font>
+<font color="red"> 250. 	unittest.main()</font>
+<font color="black"> 251. </font>
+<font color="black"> 252. </font>
+<font color="red"> 253. if __name__ == '__main__':</font>
+<font color="red"> 254. 	runtests()</font>
+</pre>
+
