@@ -17,22 +17,29 @@ if (sys.hexversion < 0x020100f0):
 else:
 	TERMIOS = termios
 
-PORT = '/dev/ttyUSB0'
+PORT = '/dev/ttyACM7'
 
 PRINTABLE_CHARS = True
 USE_TCDRAIN = True
-DATA_DISPLAY_COLLS = 35
-MAX_DISPLAY_DATA = 6000  # display at most 600 bytes
+DATA_DISPLAY_COLLS = 39
+
+MAX_DISPLAY_DATA = 1400
+
 MAX_PACKET_SIZE = 10240
-QUEUE_READ_TIMEOUT = 3.0
-TIME_BETWEEN_TESTS = 1.0
 READ_SIZE = 512
 WRITE_SIZE = 512
+
+READ_TIMEOUT = 0.01
+WRITE_TIMEOUT_BASE = 0.01
 WARMUP_TIME   = 0.001
 COOLDOWN_TIME = 0.001
+BASE_QUEUE_READ_TIMEOUT = 3.0
+
+TIME_BETWEEN_TESTS = 1.0
 NUMBER_OF_LOOPS = 12
 
-baudrates = (115200, 57600, 38400, 28800, 19200, 14400, 9600, 4800, 2400, 1200)
+#baudrates = (115200, 57600, 38400, 28800, 19200, 14400, 9600, 4800, 2400, 1200)
+baudrates = (1200, 2400, 4800, 9600, 14400, 19200, 28800, 38400, 57600, 115200)
 
 def get_rand_data(bytes, printableChars=True):
     rand = random.SystemRandom()
@@ -52,10 +59,12 @@ def setup_serial_port(port, read_timeout=None, write_timeout=None):
 	ser.bytesize = serial.EIGHTBITS
 	ser.parity = serial.PARITY_NONE
 	ser.stopbits = serial.STOPBITS_ONE
+	ser.timeout = read_timeout
 	ser.xonxoff = False
 	ser.rtscts = False
-	ser.timeout = read_timeout
 	ser.writeTimeout = write_timeout
+	ser.dsrdtr = None
+	ser.interCharTimeout = False    # used for enabe/disable read timeout and reading specified number of bytes
 	ser.close()
 	print ('Port "{port}" created'.format(port=port))
 	return ser
@@ -128,18 +137,28 @@ def print_data_diff(read_data, data_to_send):
 		print ('{moredata:<{DATA_DISPLAY_COLLS}}  {moredata:{DATA_DISPLAY_COLLS}}'.format(moredata='...', DATA_DISPLAY_COLLS=DATA_DISPLAY_COLLS))
 	print ('\n')
 
-def write_test(rxThread, read_timeout, ser, baud, data_to_send, write_size, write_delay, warm_up, cool_down):
+def write_test(rxThread, ser, baud, data_to_send, write_size, write_delay, warm_up, cool_down):
 	try:
-		if not ser.isOpen():
-			ser.open()
+		if ser.isOpen():
+			ser.close()
+		packet_size = len(data_to_send)
+		read_queue_timeout = BASE_QUEUE_READ_TIMEOUT + (packet_size / 100)
+		write_timeout = WRITE_TIMEOUT_BASE + (packet_size / 100)
+		print 'Timeout values: (read_queue_timeout: {0}, write_timeout: {1})'.format(read_queue_timeout, write_timeout)
+		# set timeouts
+		ser.setWriteTimeout(write_timeout)
 		# set bauderate
 		ser.setBaudrate(baud)
+		# open the port again
+		ser.open()
 		ser.setRTS(False)
 		ser.setDTR(True)
 		if USE_TCDRAIN:
 			iflag, oflag, cflag, lflag, ispeed, ospeed, cc = termios.tcgetattr(ser.fd)
 			iflag |= (TERMIOS.IGNBRK | TERMIOS.IGNPAR)
 			termios.tcsetattr(ser.fd, TERMIOS.TCSANOW, [iflag, oflag, cflag, lflag, ispeed, ospeed, cc])
+		ser.flushInput()
+		ser.flushOutput()
 	except serial.SerialException:
 		print ('serial.SerialException : Failure to change the baudrate to {0}.'.format(baud))
 		raise BaseException
@@ -175,9 +194,9 @@ def write_test(rxThread, read_timeout, ser, baud, data_to_send, write_size, writ
 	# examin and display recieved data
 	read_start_time = time.time()
 	read_data = ''
-	while ((len(read_data) < len(data_to_send))  and ((time.time() - read_start_time) < read_timeout)):
+	while ((len(read_data) < len(data_to_send))  and ((time.time() - read_start_time) < read_queue_timeout)):
 		try:
-			(packet, packet_time) = rxThread.read_queue.get(True, read_timeout)
+			(packet, packet_time) = rxThread.read_queue.get(True, read_queue_timeout)
 			print ('recieved {len} bytes within {time:1.4} seconds'.format(len=len(packet), time=packet_time))
 			read_data += packet
 		except Queue.Empty:
@@ -190,21 +209,22 @@ def write_test(rxThread, read_timeout, ser, baud, data_to_send, write_size, writ
 	else:
 		print ('The TX and RX data does not match - different data')
 		print_data_diff(read_data, data_to_send)
+	print ''
 
 def main():
 	print ('Generate {0} bytes of random data'.format(MAX_PACKET_SIZE))
 	data = get_rand_data(MAX_PACKET_SIZE, printableChars=PRINTABLE_CHARS)
 	print_data_diff(data, data)
-	ser = setup_serial_port(PORT, 0.01, 0.01)
+	ser = setup_serial_port(PORT, read_timeout=READ_TIMEOUT)
 	rxThread = RxThread('Recieve thread', 0, ser)
 	try:
 		rxThread.start()
 		for count in range(NUMBER_OF_LOOPS):
 			for packet_size in [x for x in range(1, MAX_PACKET_SIZE)]:
-				for baud in baudrates:
+					'''for baud in baudrates:'''
+					baud = baudrates[5]
 					print ('Testing port {port} at {baud} baudrate with {packet_size} bytes of data.'.format(port=ser.port, baud=baud, packet_size=packet_size))
 					write_test(rxThread=rxThread,
-						read_timeout=(QUEUE_READ_TIMEOUT + (packet_size / 100)),
 						ser=ser, baud=baud, data_to_send=data[:packet_size],
 						write_size=WRITE_SIZE, write_delay=0.001, warm_up=WARMUP_TIME, cool_down=COOLDOWN_TIME)
 					time.sleep(TIME_BETWEEN_TESTS)
